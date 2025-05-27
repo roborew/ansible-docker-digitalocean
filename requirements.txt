@@ -1,0 +1,4 @@
+ansible>=6.0.0
+requests>=2.25.1
+dopy>=0.3.7
+python-digitalocean>=1.17.0 

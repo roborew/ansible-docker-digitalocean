@@ -1,0 +1,30 @@
+# DigitalOcean Configuration
+do_token: "{{ lookup('env', 'DO_API_TOKEN') }}"
+do_region: "lon1" # London region
+do_size: "s-1vcpu-1gb-amd" # Basic AMD with 1GB RAM
+do_image: "ubuntu-24-04-x64" # Ubuntu 24.04 LTS
+do_ssh_keys: [] # Add your SSH key IDs here
+
+# Server Configuration
+server_user: "robodeploy"
+server_packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - software-properties-common
+  - tmux
+  - git
+  - nano
+
+# Docker Configuration
+docker_gpg_key_url: "https://download.docker.com/linux/ubuntu/gpg"
+docker_apt_repository: "deb [arch={{ ansible_architecture }} signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+
+# UFW Configuration
+ufw_rules:
+  - { port: "80", proto: "tcp" }
+  - { port: "443", proto: "tcp" }
+  - { port: "22", proto: "tcp" }
+
+# Tmux Configuration
+tmux_config_repo: "https://github.com/gpakosz/.tmux.git"

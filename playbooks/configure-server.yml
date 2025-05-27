@@ -1,0 +1,156 @@
+---
+- name: Configure Server with Docker, Tmux, and Security
+  hosts: digitalocean
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name: "{{ server_packages }}"
+        state: present
+
+    - name: Add Docker GPG key
+      shell: |
+        curl -fsSL {{ docker_gpg_key_url }} | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+      args:
+        creates: /usr/share/keyrings/docker-archive-keyring.gpg
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "{{ docker_apt_repository }}"
+        state: present
+        filename: docker
+
+    - name: Update apt cache after adding Docker repo
+      apt:
+        update_cache: yes
+
+    - name: Install Docker CE
+      apt:
+        name: docker-ce
+        state: present
+
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Create server user
+      user:
+        name: "{{ server_user }}"
+        shell: /bin/bash
+        create_home: yes
+        groups: docker
+        append: yes
+
+    - name: Set up SSH key for server user
+      block:
+        - name: Try to find SSH public key
+          set_fact:
+            ssh_public_key: "{{ lookup('first_found', ssh_key_paths, errors='ignore') }}"
+          vars:
+            ssh_key_paths:
+              - "~/.ssh/id_ed25519.pub"
+              - "~/.ssh/id_rsa.pub"
+              - "~/.ssh/id_ecdsa.pub"
+
+        - name: Add SSH key to server user
+          authorized_key:
+            user: "{{ server_user }}"
+            state: present
+            key: "{{ lookup('file', ssh_public_key) }}"
+          when: ssh_public_key is defined and ssh_public_key != ""
+
+        - name: Warning if no SSH key found
+          debug:
+            msg: "⚠️  No SSH public key found. You may need to manually add your key to the server user."
+          when: ssh_public_key is not defined or ssh_public_key == ""
+
+    - name: Configure UFW firewall
+      block:
+        - name: Install UFW
+          apt:
+            name: ufw
+            state: present
+
+        - name: Reset UFW to defaults
+          ufw:
+            state: reset
+
+        - name: Allow SSH connections
+          ufw:
+            rule: allow
+            port: "22"
+            proto: tcp
+
+        - name: Allow specified ports
+          ufw:
+            rule: allow
+            port: "{{ item.port }}"
+            proto: "{{ item.proto }}"
+          loop: "{{ ufw_rules }}"
+
+        - name: Enable UFW
+          ufw:
+            state: enabled
+            policy: deny
+            direction: incoming
+
+    - name: Test Docker installation
+      command: docker run hello-world
+      register: docker_test
+      changed_when: false
+
+    - name: Display Docker test result
+      debug:
+        msg: "Docker is working correctly!"
+      when: "'Hello from Docker!' in docker_test.stdout"
+
+- name: Configure Tmux for server user
+  hosts: digitalocean
+  become: yes
+  become_user: "{{ server_user }}"
+
+  tasks:
+    - name: Create .config/tmux directory
+      file:
+        path: "/home/{{ server_user }}/.config/tmux"
+        state: directory
+        mode: "0755"
+
+    - name: Clone tmux configuration repository
+      git:
+        repo: "{{ tmux_config_repo }}"
+        dest: "/home/{{ server_user }}/.tmux"
+        single_branch: yes
+        force: yes
+
+    - name: Create symlink for tmux configuration
+      file:
+        src: "/home/{{ server_user }}/.tmux/.tmux.conf"
+        dest: "/home/{{ server_user }}/.config/tmux/tmux.conf"
+        state: link
+        force: yes
+
+    - name: Copy local tmux configuration
+      copy:
+        src: "/home/{{ server_user }}/.tmux/.tmux.conf.local"
+        dest: "/home/{{ server_user }}/.config/tmux/tmux.conf.local"
+        remote_src: yes
+        mode: "0644"
+
+    - name: Test tmux configuration
+      shell: tmux -f /home/{{ server_user }}/.config/tmux/tmux.conf list-sessions || echo "No sessions"
+      register: tmux_test
+      changed_when: false
+
+    - name: Display tmux configuration status
+      debug:
+        msg: "Tmux configuration completed successfully!"

@@ -1,0 +1,4 @@
+---
+# Main playbook that provisions and configures DigitalOcean droplets
+- import_playbook: provision-droplet.yml
+- import_playbook: configure-server.yml
