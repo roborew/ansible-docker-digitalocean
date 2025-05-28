@@ -17,29 +17,12 @@
       default: "1"
 
   tasks:
-    - name: Load environment variables
-      include_tasks: ../tasks/load_env.yml
-
-    - name: Validate required environment variables
-      fail:
-        msg: "Required environment variable {{ item }} is not set. Please check your .env file or set it manually."
-      when: (vars[item] is not defined or vars[item] == "") and (lookup('env', item) == "")
-      loop:
-        - DO_API_TOKEN
-        - DO_SSH_KEYS
-
-    - name: Set configuration variables
-      set_fact:
-        do_token: "{{ DO_API_TOKEN | default(lookup('env', 'DO_API_TOKEN')) }}"
-        env_ssh_keys: "{{ DO_SSH_KEYS | default(lookup('env', 'DO_SSH_KEYS')) }}"
-        config_ssh_keys: "{{ (DO_SSH_KEYS | default(lookup('env', 'DO_SSH_KEYS'))).split(',') }}"
-
     - name: Check if SSH keys are names (not numeric IDs)
       set_fact:
-        keys_are_names: "{{ (config_ssh_keys[0] | regex_search('^[0-9]+$')) is none }}"
+        keys_are_names: "{{ (do_ssh_keys[0] | regex_search('^[0-9]+$')) is none }}"
 
     - name: Convert SSH key names to IDs
-      shell: "{{ playbook_dir }}/../scripts/get-ssh-key-ids.sh '{{ config_ssh_keys | join(',') }}'"
+      shell: "{{ playbook_dir }}/../scripts/get-ssh-key-ids.sh '{{ do_ssh_keys | join(',') }}'"
       register: ssh_key_lookup
       environment:
         DO_API_TOKEN: "{{ do_token }}"
@@ -53,7 +36,7 @@
 
     - name: Use provided SSH key IDs if they're already numbers
       set_fact:
-        ssh_key_ids: "{{ config_ssh_keys }}"
+        ssh_key_ids: "{{ do_ssh_keys }}"
       when: not keys_are_names
 
     - name: Display SSH keys being used
@@ -64,7 +47,7 @@
       community.digitalocean.digital_ocean_droplet:
         state: present
         name: "{{ droplet_name }}-{{ item }}"
-        oauth_token: "{{ do_token }}"
+        api_token: "{{ do_token }}"
         size: "{{ do_size }}"
         region: "{{ do_region }}"
         image: "{{ do_image }}"

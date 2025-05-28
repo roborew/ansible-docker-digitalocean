@@ -1,10 +1,10 @@
 ---
 - name: Stage 1 - Initial Server Setup (as root)
+  vars_files:
+    - ../group_vars/all.yml
   hosts: digitalocean
   become: yes
   gather_facts: yes
-  vars_files:
-    - ../group_vars/all.yml
 
   tasks:
     - name: Debug - Check root's authorized_keys content
@@ -15,17 +15,6 @@
     - name: Debug - Display root's authorized_keys
       debug:
         msg: "Root's authorized keys:\n{{ root_keys.stdout }}"
-
-    - name: Load environment variables
-      include_tasks: ../tasks/load_env.yml
-
-    - name: Validate required environment variables
-      fail:
-        msg: "Required environment variable {{ item }} is not set. Please check your .env file or set it manually."
-      when: (vars[item] is not defined or vars[item] == "") and (lookup('env', item) == "")
-      loop:
-        - ROOT_PASSWORD
-        - SERVER_USERNAME
 
     - name: Set root password (for emergency access)
       user:
@@ -110,4 +99,149 @@
         ansible_user: "{{ server_user }}"
         ansible_become: no # Don't use sudo for this test
 
+- name: Stage 2 - Server Configuration (as server user)
+  hosts: digitalocean_configured
+  become: yes
+  gather_facts: yes
+  vars_files:
+    - ../group_vars/all.yml
 
+  tasks:
+    - name: Wait for apt lock to be released
+      shell: while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do sleep 1; done
+      changed_when: false
+
+    - name: Wait for automatic system updates to complete
+      shell: while pgrep -x apt-get > /dev/null; do sleep 1; done
+      changed_when: false
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name: "{{ server_packages }}"
+        state: present
+      retries: 3
+      delay: 10
+
+    - name: Add Docker GPG key (following DigitalOcean tutorial method)
+      shell: |
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+      args:
+        creates: /etc/apt/trusted.gpg
+
+    - name: Add Docker repository (using focal for Ubuntu 24.04 compatibility)
+      shell: |
+        add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable"
+      args:
+        creates: /etc/apt/sources.list.d/archive_uri-https_download_docker_com_linux_ubuntu-noble.list
+
+    - name: Update apt cache after adding Docker repo
+      apt:
+        update_cache: yes
+
+    - name: Install Docker CE
+      apt:
+        name: docker-ce
+        state: present
+      retries: 3
+      delay: 10
+
+    - name: Add server user to docker group
+      user:
+        name: "{{ server_user }}"
+        groups: docker
+        append: yes
+
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Configure UFW firewall
+      block:
+        - name: Install UFW
+          apt:
+            name: ufw
+            state: present
+
+        - name: Reset UFW to defaults
+          ufw:
+            state: reset
+
+        - name: Allow SSH connections
+          ufw:
+            rule: allow
+            port: "22"
+            proto: tcp
+
+        - name: Allow specified ports
+          ufw:
+            rule: allow
+            port: "{{ item.port }}"
+            proto: "{{ item.proto }}"
+          loop: "{{ ufw_rules }}"
+
+        - name: Enable UFW
+          ufw:
+            state: enabled
+            policy: deny
+            direction: incoming
+
+    - name: Test Docker installation
+      command: docker run hello-world
+      register: docker_test
+      changed_when: false
+
+    - name: Display Docker test result
+      debug:
+        msg: "Docker is working correctly!"
+      when: "'Hello from Docker!' in docker_test.stdout"
+
+- name: Stage 3 - Configure Tmux for server user
+  hosts: digitalocean_configured
+  become: yes
+  become_user: "{{ server_user }}"
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: Create .config/tmux directory
+      file:
+        path: "/home/{{ server_user }}/.config/tmux"
+        state: directory
+        mode: "0755"
+
+    - name: Clone tmux configuration repository
+      git:
+        repo: "{{ tmux_config_repo }}"
+        dest: "/home/{{ server_user }}/.tmux"
+        single_branch: yes
+        force: yes
+
+    - name: Create symlink for tmux configuration
+      file:
+        src: "/home/{{ server_user }}/.tmux/.tmux.conf"
+        dest: "/home/{{ server_user }}/.config/tmux/tmux.conf"
+        state: link
+        force: yes
+
+    - name: Copy local tmux configuration
+      copy:
+        src: "/home/{{ server_user }}/.tmux/.tmux.conf.local"
+        dest: "/home/{{ server_user }}/.config/tmux/tmux.conf.local"
+        remote_src: yes
+        mode: "0644"
+
+    - name: Test tmux configuration
+      shell: tmux -f /home/{{ server_user }}/.config/tmux/tmux.conf list-sessions || echo "No sessions"
+      register: tmux_test
+      changed_when: false
+
+    - name: Display tmux configuration status
+      debug:
+        msg: "Tmux configuration completed successfully!"

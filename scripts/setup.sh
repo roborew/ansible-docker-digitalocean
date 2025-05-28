@@ -196,21 +196,55 @@ fi
 
 echo ""
 
-# Check for DigitalOcean API token
-if [ -z "$DO_API_TOKEN" ]; then
-    echo "⚠️  DO_API_TOKEN environment variable is not set."
-    echo "   Please either:"
-    echo "   1. Create a .env file from env.example and set DO_API_TOKEN"
-    echo "   2. Set it manually: export DO_API_TOKEN=your_token_here"
-    echo "   You can get your token from: https://cloud.digitalocean.com/account/api/tokens"
-else
-    echo "✅ DO_API_TOKEN is set"
+# Run environment setup if .env exists
+if [ -f .env ]; then
+    echo "🔄 Running environment setup..."
+    source scripts/setup-env.sh
+fi 
+
+# Define required environment variables
+REQUIRED_ENV_VARS=(
+    "DO_API_TOKEN:DigitalOcean API Token"
+    "DO_SSH_KEYS:SSH Key Names"
+    "SERVER_USERNAME:Server Username"
+    "ROOT_PASSWORD:Root Password"
+)
+
+# Check for environment variables
+echo "🔍 Checking environment variables..."
+missing_vars=0
+
+for var_info in "${REQUIRED_ENV_VARS[@]}"; do
+    # Split the string into variable name and description
+    var_name="${var_info%%:*}"
+    var_desc="${var_info#*:}"
+    
+    if [ -z "${!var_name}" ]; then
+        echo -e "${RED}❌ $var_desc ($var_name) is not set${NC}"
+        missing_vars=1
+    else
+        echo -e "${GREEN}✅ $var_desc is set${NC}"
+    fi
+done
+
+if [ $missing_vars -eq 1 ]; then
+    echo -e "\n${YELLOW}⚠️  Some required variables are missing.${NC}"
+    echo "Please ensure your .env file contains all required variables:"
+    echo "1. Copy .env.example to .env if you haven't already:"
+    echo "   cp .env.example .env"
+    echo "2. Edit .env and fill in your values:"
+    echo "   - DO_API_TOKEN (from https://cloud.digitalocean.com/account/api/tokens)"
+    echo "   - DO_SSH_KEYS (comma-separated list of SSH key names)"
+    echo "   - SERVER_USERNAME (the non-root user to create)"
+    echo "   - ROOT_PASSWORD (secure password for root user)"
+    echo ""
 fi
 
 echo ""
 echo "🎉 Setup complete! Next steps:"
-echo "1. Copy env.example to .env and configure your settings (recommended)"
+echo "1. Copy env.example to .env and configure your settings (if not done)"
 echo "2. Add your SSH public key to DigitalOcean: https://cloud.digitalocean.com/account/security"
-echo "3. Get your SSH key IDs from DigitalOcean and update .env or group_vars/all.yml"
+echo "3. Run: source scripts/setup-env.sh to load your environment"
 echo "4. Run: ansible-playbook playbooks/site.yml"
-echo "" 
+echo ""
+

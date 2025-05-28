@@ -26,29 +26,32 @@ This Ansible project automates the provisioning and configuration of DigitalOcea
 
 ## Quick Start
 
-1. **Clone and setup**:
+1. **Clone the repository**:
 
    ```bash
    git clone <your-repo>
    cd robo-ansible
+   ```
+
+2. **Configure environment**:
+
+   ```bash
+   cp .env.example .env
+   # Edit .env with your settings:
+   # - DO_API_TOKEN (DigitalOcean API token)
+   # - DO_SSH_KEYS (comma-separated list of SSH key names)
+   # - SERVER_USERNAME
+   # - ROOT_PASSWORD
+   ```
+
+3. **Run setup**:
+
+   ```bash
    chmod +x scripts/setup.sh
    ./scripts/setup.sh
    ```
 
-2. **Configure environment** (recommended):
-
-   ```bash
-   cp env.example .env
-   # Edit .env with your settings
-   ```
-
-   Or set environment variables manually:
-
-   ```bash
-   export DO_API_TOKEN="your_digitalocean_api_token"
-   ```
-
-3. **Deploy**:
+4. **Deploy**:
    ```bash
    ansible-playbook playbooks/site.yml
    ```
