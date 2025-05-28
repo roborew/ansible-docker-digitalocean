@@ -61,3 +61,4 @@
       debug:
         msg: "No droplets found matching pattern: {{ droplet_name_pattern }}"
       when: droplets_to_destroy | length == 0
+ 

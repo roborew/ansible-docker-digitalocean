@@ -3,9 +3,6 @@
 .env.local
 .env.production
 
-prod.yml
-hosts.yml
-
 # Ansible vault password files
 .vault_pass
 .vault_password

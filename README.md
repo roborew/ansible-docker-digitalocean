@@ -29,65 +29,50 @@ This Ansible project automates the provisioning and configuration of DigitalOcea
 
 ## Quick Start
 
-### For New Users (Public Repository)
+### **🚀 New User Setup**
 
-1. **Clone and initialize**:
+1. **Bootstrap** (one-time setup):
 
    ```bash
    git clone <this-repo>
    cd robo-ansible
-   chmod +x scripts/init-project.sh
-   ./scripts/init-project.sh
+   ./scripts/bootstrap.sh
    ```
 
-2. **Configure your environment**:
+2. **Configure** (edit your settings):
 
    ```bash
-   # Edit with your DigitalOcean settings
-   nano .env
-
-   # Edit with your applications
-   nano group_vars/prod.yml
+   nano .env                    # Add DigitalOcean API token & SSH keys
+   nano group_vars/prod.yml     # Add your applications
+   ./scripts/encrypt-prod.sh encrypt  # Encrypt production config
    ```
 
-3. **Encrypt sensitive data**:
+3. **Prepare** (load environment & validate):
 
    ```bash
-   ./scripts/encrypt-prod.sh encrypt
+   source scripts/prepare.sh
    ```
 
-4. **Run setup**:
-
+4. **Deploy**:
    ```bash
-   chmod +x scripts/setup.sh
-   ./scripts/setup.sh
+   ansible-playbook playbooks/site.yml              # Provision & configure
+   ansible-playbook playbooks/deploy-stack.yml      # Deploy applications
    ```
 
-5. **Provision and deploy**:
+### **🔄 Returning User Workflow**
 
-   ```bash
-   # Provision servers
-   source scripts/setup-env.sh
-   ansible-playbook playbooks/site.yml
+```bash
+source scripts/prepare.sh                          # Load environment & validate
+ansible-playbook playbooks/deploy-stack.yml        # Deploy applications
+```
 
-   # Deploy applications
-   ansible-playbook playbooks/deploy-stack.yml --ask-vault-pass
-   ```
+### **🛠️ Script Overview**
 
-### For Development (Existing Setup)
-
-1. **Clone the repository**:
-
-   ```bash
-   git clone <your-repo>
-   cd robo-ansible
-   ```
-
-2. **Load environment and deploy**:
-   ```bash
-   source scripts/setup-env.sh
-   ansible-playbook playbooks/deploy-stack.yml --ask-vault-pass
-   ```
+| Script            | Purpose                                                   | When to Use           |
+| ----------------- | --------------------------------------------------------- | --------------------- |
+| `bootstrap.sh`    | Install Ansible, collections, initialize project files    | **Once** (first time) |
+| `prepare.sh`      | Load environment variables + validate everything is ready | **Every deployment**  |
+| `encrypt-prod.sh` | Manage vault encryption for production config             | When editing prod.yml |
 
 ## Repository Strategy
 
@@ -384,8 +369,8 @@ The automated setup includes:
 1. **Environment Variables Not Loading**:
 
    ```bash
-   # Make sure to source the environment setup
-   source scripts/setup-env.sh
+   # Use the prepare script to load and validate environment
+   source scripts/prepare.sh
 
    # Check if variables are set
    echo $DO_API_TOKEN
@@ -457,10 +442,11 @@ robo-ansible/
 │   ├── caddy_proxy/              # Caddy proxy setup
 │   └── deploy_apps/              # Application deployment
 ├── scripts/
-│   ├── setup.sh                  # Environment setup
-│   ├── setup-env.sh              # Environment variable loading
-│   ├── encrypt-prod.sh           # Vault management
-│   └── get-ssh-key-ids.sh        # SSH key lookup
+│   ├── bootstrap.sh               # One-time setup (Ansible + project init)
+│   ├── prepare.sh                 # Load environment + validation
+│   ├── encrypt-prod.sh            # Vault management
+│   ├── get-ssh-key-ids.sh         # SSH key lookup
+│   └── manage-inventory.sh        # Inventory management
 └── templates/
     └── docker-compose.example.yml # App template
 ```
