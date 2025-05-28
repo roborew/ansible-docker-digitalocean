@@ -1,0 +1,36 @@
+---
+# Production application configuration template
+# Copy this file to prod.yml and customize for your environment
+# Encrypt with: ansible-vault encrypt group_vars/prod.yml
+
+# List of applications to deploy
+apps:
+  - name: "example-app"
+    repo: "https://github.com/your-org/your-app.git"
+    branch: "main"
+    hostname: "app.example.com"
+    port: "3000"
+    
+  # Additional app examples:
+  # - name: "api-service"
+  #   repo: "https://github.com/your-org/api.git"
+  #   branch: "production"
+  #   hostname: "api.example.com"
+  #   port: "8080"
+  #
+  # - name: "frontend"
+  #   repo: "https://github.com/your-org/frontend.git"
+  #   hostname: "www.example.com"
+  #   port: "80"
+
+# Caddy configuration for production
+caddy_email: "admin@example.com"
+
+# Production-specific overrides
+apps_base_dir: "/opt"
+proxy_network_name: "proxy"
+
+# Example environment-specific variables
+# database_host: "db.example.com"
+# redis_host: "redis.example.com"
+# api_key: "your-encrypted-api-key" 

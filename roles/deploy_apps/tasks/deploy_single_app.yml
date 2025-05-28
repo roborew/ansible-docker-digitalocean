@@ -1,0 +1,97 @@
+---
+- name: "Set app variables for {{ app.name }}"
+  set_fact:
+    app_name: "{{ app.name }}"
+    app_repo: "{{ app.repo }}"
+    app_branch: "{{ app.branch | default('main') }}"
+    app_dir: "{{ apps_base_dir }}/{{ app.name }}"
+    app_hostname: "{{ app.hostname | default(app.name + '.' + ansible_default_ipv4.address + '.nip.io') }}"
+    app_port: "{{ app.port | default('3000') }}"
+
+- name: "Display deployment info for {{ app_name }}"
+  debug:
+    msg: |
+      Deploying {{ app_name }}:
+      - Repository: {{ app_repo }}
+      - Branch: {{ app_branch }}
+      - Directory: {{ app_dir }}
+      - Hostname: {{ app_hostname }}
+      - Port: {{ app_port }}
+
+- name: "Clone/update {{ app_name }} repository"
+  git:
+    repo: "{{ app_repo }}"
+    dest: "{{ app_dir }}"
+    version: "{{ app_branch }}"
+    force: "{{ git_force_update }}"
+    accept_hostkey: "{{ git_accept_hostkey }}"
+  become: true
+  become_user: "{{ apps_user }}"
+
+- name: "Set ownership of {{ app_name }} directory"
+  file:
+    path: "{{ app_dir }}"
+    owner: "{{ apps_user }}"
+    group: "{{ apps_group }}"
+    recurse: true
+    state: directory
+
+- name: "Check if docker-compose.yml exists for {{ app_name }}"
+  stat:
+    path: "{{ app_dir }}/docker-compose.yml"
+  register: compose_file
+
+- name: "Check if compose.yml exists for {{ app_name }}"
+  stat:
+    path: "{{ app_dir }}/compose.yml"
+  register: compose_file_alt
+  when: not compose_file.stat.exists
+
+- name: "Fail if no compose file found for {{ app_name }}"
+  fail:
+    msg: "No docker-compose.yml or compose.yml found in {{ app_dir }}"
+  when: not compose_file.stat.exists and not compose_file_alt.stat.exists
+
+- name: "Stop existing containers for {{ app_name }}"
+  command: "{{ compose_command }} down"
+  args:
+    chdir: "{{ app_dir }}"
+  become: true
+  become_user: "{{ apps_user }}"
+  ignore_errors: true
+
+- name: "Pull latest images for {{ app_name }}"
+  command: "{{ compose_command }} pull"
+  args:
+    chdir: "{{ app_dir }}"
+  become: true
+  become_user: "{{ apps_user }}"
+  ignore_errors: true
+
+- name: "Start {{ app_name }} with docker compose"
+  command: "{{ compose_command }} up -d"
+  args:
+    chdir: "{{ app_dir }}"
+  become: true
+  become_user: "{{ apps_user }}"
+  environment:
+    CADDY_HOSTNAME: "{{ app_hostname }}"
+    CADDY_PORT: "{{ app_port }}"
+    PROXY_NETWORK: "{{ proxy_network_name }}"
+
+- name: "Verify {{ app_name }} containers are running"
+  command: "{{ compose_command }} ps --format json"
+  args:
+    chdir: "{{ app_dir }}"
+  become: true
+  become_user: "{{ apps_user }}"
+  register: compose_status
+  changed_when: false
+
+- name: "Display {{ app_name }} status"
+  debug:
+    msg: |
+      {{ app_name }} deployment complete!
+      - Directory: {{ app_dir }}
+      - URL: https://{{ app_hostname }}
+      - Containers: {{ compose_status.stdout | from_json | length }} running

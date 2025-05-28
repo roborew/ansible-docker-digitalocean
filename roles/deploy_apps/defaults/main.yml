@@ -1,0 +1,16 @@
+---
+# App deployment defaults
+apps_base_dir: "/opt"
+apps_user: "{{ server_user }}"
+apps_group: "{{ server_user }}"
+
+# Git configuration
+git_force_update: true
+git_accept_hostkey: true
+
+# Docker Compose configuration
+compose_command: "docker compose"
+compose_project_directory_suffix: ""
+
+# Network configuration
+proxy_network_name: "proxy"

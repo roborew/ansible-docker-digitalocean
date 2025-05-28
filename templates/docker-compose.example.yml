@@ -1,0 +1,64 @@
+# Example docker-compose.yml for applications
+# This template shows how to configure your app for Caddy Docker Proxy
+
+version: '3.8'
+
+services:
+  app:
+    # Your application image
+    image: your-app:latest
+    # or build from Dockerfile
+    # build: .
+    
+    # Container name (optional)
+    container_name: your-app-name
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Environment variables
+    environment:
+      - NODE_ENV=production
+      # Add your app-specific environment variables
+    
+    # Volumes (if needed)
+    volumes:
+      - ./data:/app/data
+    
+    # Expose the port your app runs on (don't publish to host)
+    expose:
+      - "3000"  # Change to your app's port
+    
+    # Connect to proxy network
+    networks:
+      - proxy
+      - default  # Keep default network for internal communication
+    
+    # Caddy labels for automatic proxy configuration
+    labels:
+      # Required: hostname for your app
+      caddy: "${CADDY_HOSTNAME:-your-app.example.com}"
+      
+      # Required: reverse proxy configuration
+      caddy.reverse_proxy: "{{upstreams ${CADDY_PORT:-3000}}}"
+      
+      # Optional: additional Caddy directives
+      # caddy.header: "X-Frame-Options DENY"
+      # caddy.encode: "gzip"
+      
+      # Optional: TLS configuration (automatic by default)
+      # caddy.tls: "internal"  # Use for local development
+      # caddy.tls.ca: "https://acme-v02.api.letsencrypt.org/directory"
+
+# Networks
+networks:
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-proxy}
+  default:
+    driver: bridge
+
+# Volumes (if needed)
+volumes:
+  data:
+    driver: local 

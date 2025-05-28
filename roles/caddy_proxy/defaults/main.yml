@@ -1,0 +1,15 @@
+---
+# Caddy Docker Proxy defaults
+caddy_image: "lucaslorentz/caddy-docker-proxy:ci-alpine"
+caddy_container_name: "caddy-proxy"
+caddy_network_name: "proxy"
+caddy_data_volume: "caddy_data"
+caddy_config_volume: "caddy_config"
+
+# Caddy configuration
+caddy_email: "{{ lookup('env', 'CADDY_EMAIL') | default('admin@example.com') }}"
+caddy_log_level: "INFO"
+
+# Network configuration
+proxy_network_driver: "bridge"
+proxy_network_subnet: "172.20.0.0/16"

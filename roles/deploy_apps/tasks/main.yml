@@ -1,0 +1,23 @@
+---
+- name: Ensure apps base directory exists
+  file:
+    path: "{{ apps_base_dir }}"
+    state: directory
+    owner: "{{ apps_user }}"
+    group: "{{ apps_group }}"
+    mode: "0755"
+
+- name: Deploy applications
+  include_tasks: deploy_single_app.yml
+  loop: "{{ apps }}"
+  loop_control:
+    loop_var: app
+  when: apps is defined and apps | length > 0
+
+- name: Display deployment summary
+  debug:
+    msg: |
+      Application deployment complete!
+      Deployed {{ apps | length }} applications to {{ apps_base_dir }}
+      Applications are accessible through Caddy proxy with automatic TLS
+  when: apps is defined and apps | length > 0

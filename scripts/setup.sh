@@ -129,6 +129,7 @@ fi
 # Install Ansible collections
 echo "📦 Installing Ansible collections..."
 ansible-galaxy collection install community.digitalocean
+ansible-galaxy collection install community.docker
 
 # SSH Key handling
 echo ""

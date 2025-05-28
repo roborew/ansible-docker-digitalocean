@@ -97,3 +97,28 @@
           {% endfor %}
         dest: "./droplet_ips.txt"
       when: droplet_result.results | selectattr('changed') | selectattr('data', 'defined') | list | length > 0
+
+    - name: Update Ansible inventory with new droplets
+      shell: "{{ playbook_dir }}/../scripts/update-inventory.sh"
+      environment:
+        DO_API_TOKEN: "{{ do_token }}"
+      when: droplet_result.results | selectattr('changed') | selectattr('data', 'defined') | list | length > 0
+      delegate_to: localhost
+
+    - name: Display next steps
+      debug:
+        msg: |
+          🎉 Provisioning Complete!
+
+          Droplets Created:
+          {% for result in droplet_result.results %}
+          {% if result.changed and result.data is defined %}
+          - {{ result.data.droplet.name }}: {{ result.data.droplet.networks.v4[0].ip_address }}
+          {% endif %}
+          {% endfor %}
+
+          Next Steps:
+          1. Configure servers: ansible-playbook playbooks/configure-server.yml
+          2. Deploy applications: ansible-playbook playbooks/deploy-stack.yml --ask-vault-pass
+          3. Check inventory: cat inventory/hosts.yml
+      when: droplet_result.results | selectattr('changed') | selectattr('data', 'defined') | list | length > 0

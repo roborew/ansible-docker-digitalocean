@@ -1,0 +1,53 @@
+---
+- name: Deploy Caddy Proxy and Applications
+  hosts: digitalocean
+  become: true
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/prod.yml
+
+  pre_tasks:
+    - name: Ensure Docker is running
+      systemd:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Ensure user is in docker group
+      user:
+        name: "{{ server_user }}"
+        groups: docker
+        append: true
+
+    - name: Install Docker Compose plugin
+      package:
+        name: docker-compose-plugin
+        state: present
+
+  roles:
+    - role: caddy_proxy
+      tags: ["caddy_proxy"]
+
+    - role: deploy_apps
+      tags: ["deploy_apps"]
+
+  post_tasks:
+    - name: Display deployment summary
+      debug:
+        msg: |
+          🎉 Deployment Complete!
+
+          Caddy Proxy:
+          - Running on ports 80/443
+          - Automatic TLS certificates
+          - Network: {{ caddy_network_name }}
+
+          Applications Deployed:
+          {% for app in apps %}
+          - {{ app.name }}: https://{{ app.hostname | default(app.name + '.' + ansible_default_ipv4.address + '.nip.io') }}
+          {% endfor %}
+
+          To add new applications:
+          1. Add to apps list in group_vars/prod.yml
+          2. Run: ansible-playbook playbooks/deploy-stack.yml --tags deploy_apps
+      tags: ["always"]

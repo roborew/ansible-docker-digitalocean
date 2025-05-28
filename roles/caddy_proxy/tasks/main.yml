@@ -1,0 +1,67 @@
+---
+- name: Create proxy network
+  community.docker.docker_network:
+    name: "{{ caddy_network_name }}"
+    driver: "{{ proxy_network_driver }}"
+    ipam_config:
+      - subnet: "{{ proxy_network_subnet }}"
+    state: present
+
+- name: Create Caddy data volume
+  community.docker.docker_volume:
+    name: "{{ caddy_data_volume }}"
+    state: present
+
+- name: Create Caddy config volume
+  community.docker.docker_volume:
+    name: "{{ caddy_config_volume }}"
+    state: present
+
+- name: Stop existing Caddy container if running
+  community.docker.docker_container:
+    name: "{{ caddy_container_name }}"
+    state: absent
+  ignore_errors: true
+
+- name: Start Caddy Docker Proxy container
+  community.docker.docker_container:
+    name: "{{ caddy_container_name }}"
+    image: "{{ caddy_image }}"
+    state: started
+    restart_policy: unless-stopped
+    networks:
+      - name: "{{ caddy_network_name }}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "{{ caddy_data_volume }}:/data"
+      - "{{ caddy_config_volume }}:/config"
+    env:
+      CADDY_INGRESS_NETWORKS: "{{ caddy_network_name }}"
+      CADDY_DOCKER_LABEL_PREFIX: "caddy"
+    labels:
+      caddy_docker_proxy: "true"
+    log_driver: "json-file"
+    log_options:
+      max-size: "10m"
+      max-file: "3"
+
+- name: Wait for Caddy to be ready
+  wait_for:
+    port: 80
+    host: localhost
+    delay: 5
+    timeout: 30
+
+- name: Display Caddy proxy status
+  debug:
+    msg: |
+      Caddy Docker Proxy is running!
+      - Container: {{ caddy_container_name }}
+      - Network: {{ caddy_network_name }}
+      - HTTP: http://localhost:80
+      - HTTPS: https://localhost:443
+      - Data volume: {{ caddy_data_volume }}
+      - Config volume: {{ caddy_config_volume }}

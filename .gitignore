@@ -1,22 +1,31 @@
-# Ansible
-*.retry
+# Environment files
+.env
+.env.local
+.env.production
+
+prod.yml
+hosts.yml
+
+# Ansible vault password files
 .vault_pass
-vault_pass.txt
+.vault_password
 
-# DigitalOcean
+# Generated files
 droplet_ips.txt
-.do_token
+*.retry
 
-# SSH Keys
+# Inventory backups
+inventory/backups/
+
+# Local inventory files (keep templates)
+inventory/hosts.yml
+# Keep inventory/production.yml as template
+
+# SSH keys
 *.pem
 *.key
 id_rsa*
 id_ed25519*
-id_ecdsa*
-
-# Environment variables
-.env
-.env.local
 
 # OS generated files
 .DS_Store
@@ -27,7 +36,7 @@ id_ecdsa*
 ehthumbs.db
 Thumbs.db
 
-# IDE
+# Editor files
 .vscode/
 .idea/
 *.swp
@@ -56,16 +65,13 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual environments
-venv/
-env/
-ENV/
-
 # Logs
 *.log
 logs/
 
 # Temporary files
-tmp/
-temp/
-*.tmp 
+*.tmp
+*.temp
+
+# DigitalOcean
+.do_token 
