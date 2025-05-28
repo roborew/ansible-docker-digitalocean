@@ -1,10 +1,72 @@
 #!/bin/bash
 
-# Setup script for Ansible DigitalOcean deployment
+# Enhanced Ansible Setup Script
+# Handles dependency installation and environment setup
 
 set -e
 
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}🚀 Ansible DigitalOcean Setup${NC}"
+echo "=================================="
+
+# Function to detect OS
+detect_os() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "macOS"
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        if command -v apt-get >/dev/null 2>&1; then
+            echo "ubuntu"
+        else
+            echo "linux"
+        fi
+    else
+        echo "unknown"
+    fi
+}
+
+# Function to load environment variables
+load_env() {
+    if [[ -f ".env" ]]; then
+        echo -e "${GREEN}📄 Loading environment variables from .env file...${NC}"
+        set -a  # Automatically export all variables
+        source .env
+        set +a  # Turn off automatic export
+        echo -e "${GREEN}✅ Environment variables loaded${NC}"
+        return 0
+    else
+        echo -e "${YELLOW}⚠️  No .env file found. You'll need to set environment variables manually.${NC}"
+        return 1
+    fi
+}
+
+# Function to run ansible with environment loaded
+run_ansible() {
+    load_env
+    echo -e "${BLUE}🎭 Running Ansible playbook...${NC}"
+    "$@"
+}
+
+# Export the function so it can be used
+export -f run_ansible
+
+# Setup script for Ansible DigitalOcean deployment
+
 echo "🚀 Setting up Ansible DigitalOcean deployment environment..."
+
+# Load .env file if it exists
+if [ -f .env ]; then
+    echo "📄 Loading environment variables from .env file..."
+    export $(grep -v '^#' .env | xargs)
+    echo "✅ Environment variables loaded"
+else
+    echo "💡 No .env file found. You can create one from env.example for easier configuration."
+fi
 
 # Detect operating system
 OS="unknown"
@@ -137,7 +199,9 @@ echo ""
 # Check for DigitalOcean API token
 if [ -z "$DO_API_TOKEN" ]; then
     echo "⚠️  DO_API_TOKEN environment variable is not set."
-    echo "   Please set it with: export DO_API_TOKEN=your_token_here"
+    echo "   Please either:"
+    echo "   1. Create a .env file from env.example and set DO_API_TOKEN"
+    echo "   2. Set it manually: export DO_API_TOKEN=your_token_here"
     echo "   You can get your token from: https://cloud.digitalocean.com/account/api/tokens"
 else
     echo "✅ DO_API_TOKEN is set"
@@ -145,8 +209,8 @@ fi
 
 echo ""
 echo "🎉 Setup complete! Next steps:"
-echo "1. Add your SSH public key to DigitalOcean: https://cloud.digitalocean.com/account/security"
-echo "2. Set your DO_API_TOKEN: export DO_API_TOKEN=your_token_here"
-echo "3. Update group_vars/all.yml with your SSH key IDs and preferences"
+echo "1. Copy env.example to .env and configure your settings (recommended)"
+echo "2. Add your SSH public key to DigitalOcean: https://cloud.digitalocean.com/account/security"
+echo "3. Get your SSH key IDs from DigitalOcean and update .env or group_vars/all.yml"
 echo "4. Run: ansible-playbook playbooks/site.yml"
 echo "" 

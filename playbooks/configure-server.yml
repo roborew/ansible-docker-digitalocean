@@ -1,156 +1,113 @@
 ---
-- name: Configure Server with Docker, Tmux, and Security
+- name: Stage 1 - Initial Server Setup (as root)
   hosts: digitalocean
   become: yes
   gather_facts: yes
+  vars_files:
+    - ../group_vars/all.yml
 
   tasks:
-    - name: Update apt cache
-      apt:
-        update_cache: yes
-        cache_valid_time: 3600
+    - name: Debug - Check root's authorized_keys content
+      shell: "cat /root/.ssh/authorized_keys || echo 'File not found'"
+      register: root_keys
+      changed_when: false
 
-    - name: Install required packages
-      apt:
-        name: "{{ server_packages }}"
-        state: present
+    - name: Debug - Display root's authorized_keys
+      debug:
+        msg: "Root's authorized keys:\n{{ root_keys.stdout }}"
 
-    - name: Add Docker GPG key
-      shell: |
-        curl -fsSL {{ docker_gpg_key_url }} | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-      args:
-        creates: /usr/share/keyrings/docker-archive-keyring.gpg
+    - name: Load environment variables
+      include_tasks: ../tasks/load_env.yml
 
-    - name: Add Docker repository
-      apt_repository:
-        repo: "{{ docker_apt_repository }}"
-        state: present
-        filename: docker
+    - name: Validate required environment variables
+      fail:
+        msg: "Required environment variable {{ item }} is not set. Please check your .env file or set it manually."
+      when: (vars[item] is not defined or vars[item] == "") and (lookup('env', item) == "")
+      loop:
+        - ROOT_PASSWORD
+        - SERVER_USERNAME
 
-    - name: Update apt cache after adding Docker repo
-      apt:
-        update_cache: yes
-
-    - name: Install Docker CE
-      apt:
-        name: docker-ce
-        state: present
-
-    - name: Start and enable Docker service
-      systemd:
-        name: docker
-        state: started
-        enabled: yes
+    - name: Set root password (for emergency access)
+      user:
+        name: root
+        password: "{{ root_password | password_hash('sha512') }}"
+      tags: security
 
     - name: Create server user
       user:
         name: "{{ server_user }}"
         shell: /bin/bash
         create_home: yes
-        groups: docker
+        groups: sudo
         append: yes
 
     - name: Set up SSH key for server user
       block:
-        - name: Try to find SSH public key
-          set_fact:
-            ssh_public_key: "{{ lookup('first_found', ssh_key_paths, errors='ignore') }}"
-          vars:
-            ssh_key_paths:
-              - "~/.ssh/id_ed25519.pub"
-              - "~/.ssh/id_rsa.pub"
-              - "~/.ssh/id_ecdsa.pub"
+        - name: Debug - Ensure root's authorized_keys exists and is readable
+          stat:
+            path: /root/.ssh/authorized_keys
+          register: auth_keys_stat
 
-        - name: Add SSH key to server user
-          authorized_key:
-            user: "{{ server_user }}"
-            state: present
-            key: "{{ lookup('file', ssh_public_key) }}"
-          when: ssh_public_key is defined and ssh_public_key != ""
-
-        - name: Warning if no SSH key found
+        - name: Debug - Show authorized_keys file status
           debug:
-            msg: "⚠️  No SSH public key found. You may need to manually add your key to the server user."
-          when: ssh_public_key is not defined or ssh_public_key == ""
+            msg:
+              - "File exists: {{ auth_keys_stat.stat.exists }}"
+              - "File permissions: {{ auth_keys_stat.stat.mode }}"
+              - "File owner: {{ auth_keys_stat.stat.pw_name }}"
 
-    - name: Configure UFW firewall
-      block:
-        - name: Install UFW
-          apt:
-            name: ufw
-            state: present
+        - name: Ensure .ssh directory exists for server user
+          file:
+            path: "/home/{{ server_user }}/.ssh"
+            state: directory
+            owner: "{{ server_user }}"
+            group: "{{ server_user }}"
+            mode: "0700"
 
-        - name: Reset UFW to defaults
-          ufw:
-            state: reset
+        - name: Copy SSH authorized_keys from root to server user
+          copy:
+            src: /root/.ssh/authorized_keys
+            dest: "/home/{{ server_user }}/.ssh/authorized_keys"
+            remote_src: yes
+            owner: "{{ server_user }}"
+            group: "{{ server_user }}"
+            mode: "0600"
 
-        - name: Allow SSH connections
-          ufw:
-            rule: allow
-            port: "22"
-            proto: tcp
+        - name: Debug - Check server user's authorized_keys content
+          shell: "cat /home/{{ server_user }}/.ssh/authorized_keys || echo 'File not found'"
+          register: user_keys
+          changed_when: false
 
-        - name: Allow specified ports
-          ufw:
-            rule: allow
-            port: "{{ item.port }}"
-            proto: "{{ item.proto }}"
-          loop: "{{ ufw_rules }}"
+        - name: Debug - Display server user's authorized_keys
+          debug:
+            msg: "Server user's authorized keys:\n{{ user_keys.stdout }}"
 
-        - name: Enable UFW
-          ufw:
-            state: enabled
-            policy: deny
-            direction: incoming
+    - name: Allow passwordless sudo for server user
+      lineinfile:
+        path: /etc/sudoers.d/{{ server_user }}
+        line: "{{ server_user }} ALL=(ALL) NOPASSWD:ALL"
+        state: present
+        mode: "0440"
+        create: yes
+        validate: "visudo -cf %s"
 
-    - name: Test Docker installation
-      command: docker run hello-world
-      register: docker_test
-      changed_when: false
+    - name: Update inventory to use server user for subsequent connections
+      add_host:
+        name: "{{ inventory_hostname }}"
+        ansible_host: "{{ ansible_host }}"
+        ansible_user: "{{ server_user }}"
+        ansible_ssh_private_key_file: "{{ ansible_ssh_private_key_file | default(omit) }}"
+        groups: digitalocean_configured
 
-    - name: Display Docker test result
-      debug:
-        msg: "Docker is working correctly!"
-      when: "'Hello from Docker!' in docker_test.stdout"
+    - name: Pause for a moment before attempting new connection
+      pause:
+        seconds: 10
 
-- name: Configure Tmux for server user
-  hosts: digitalocean
-  become: yes
-  become_user: "{{ server_user }}"
+    - name: Test connection to new user (without sudo)
+      wait_for_connection:
+        delay: 5
+        timeout: 60
+      vars:
+        ansible_user: "{{ server_user }}"
+        ansible_become: no # Don't use sudo for this test
 
-  tasks:
-    - name: Create .config/tmux directory
-      file:
-        path: "/home/{{ server_user }}/.config/tmux"
-        state: directory
-        mode: "0755"
 
-    - name: Clone tmux configuration repository
-      git:
-        repo: "{{ tmux_config_repo }}"
-        dest: "/home/{{ server_user }}/.tmux"
-        single_branch: yes
-        force: yes
-
-    - name: Create symlink for tmux configuration
-      file:
-        src: "/home/{{ server_user }}/.tmux/.tmux.conf"
-        dest: "/home/{{ server_user }}/.config/tmux/tmux.conf"
-        state: link
-        force: yes
-
-    - name: Copy local tmux configuration
-      copy:
-        src: "/home/{{ server_user }}/.tmux/.tmux.conf.local"
-        dest: "/home/{{ server_user }}/.config/tmux/tmux.conf.local"
-        remote_src: yes
-        mode: "0644"
-
-    - name: Test tmux configuration
-      shell: tmux -f /home/{{ server_user }}/.config/tmux/tmux.conf list-sessions || echo "No sessions"
-      register: tmux_test
-      changed_when: false
-
-    - name: Display tmux configuration status
-      debug:
-        msg: "Tmux configuration completed successfully!"

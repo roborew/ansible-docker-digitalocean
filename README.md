@@ -35,23 +35,80 @@ This Ansible project automates the provisioning and configuration of DigitalOcea
    ./scripts/setup.sh
    ```
 
-2. **Configure DigitalOcean**:
+2. **Configure environment** (recommended):
+
+   ```bash
+   cp env.example .env
+   # Edit .env with your settings
+   ```
+
+   Or set environment variables manually:
 
    ```bash
    export DO_API_TOKEN="your_digitalocean_api_token"
    ```
 
-3. **Update configuration** (edit `group_vars/all.yml`):
-
-   - Add your SSH key IDs from DigitalOcean
-   - Adjust droplet size, region, and other preferences
-
-4. **Deploy**:
+3. **Deploy**:
    ```bash
    ansible-playbook playbooks/site.yml
    ```
 
 ## Configuration
+
+### Environment Variables (.env file)
+
+The recommended way to configure sensitive settings is using a `.env` file:
+
+```bash
+# Copy the example file
+cp env.example .env
+
+# Edit with your settings
+nano .env
+```
+
+**Example .env file**:
+
+```bash
+# DigitalOcean Configuration
+DO_API_TOKEN=your_digitalocean_api_token_here
+
+# SSH Key Names from DigitalOcean (comma-separated)
+# Use friendly names like they appear in your DO account
+DO_SSH_KEYS=mac-mini-pub-key,mac-book-pro-pub
+
+# Server Security
+ROOT_PASSWORD=your_secure_root_password
+SERVER_USERNAME=robodeploy
+
+# Optional: Override SSH key detection
+# SSH_PUBLIC_KEY_PATH=/path/to/your/public/key.pub
+```
+
+**Benefits of using .env**:
+
+- ✅ Keeps sensitive data out of git
+- ✅ Easy to manage different environments
+- ✅ Automatically loaded by setup script
+- ✅ Overrides default values in group_vars
+- ✅ Use friendly SSH key names instead of cryptic IDs
+
+### SSH Key Name Lookup
+
+Instead of hunting for SSH key ID numbers, you can use the friendly names from your DigitalOcean account:
+
+```bash
+# List all your SSH keys
+./scripts/get-ssh-key-ids.sh
+
+# Look up specific keys by name
+./scripts/get-ssh-key-ids.sh "mac-mini-pub-key,mac-book-pro-pub"
+
+# Partial matching works too
+./scripts/get-ssh-key-ids.sh "mini,book"
+```
+
+The script will show you the exact line to add to your `.env` file.
 
 ### DigitalOcean Settings (`group_vars/all.yml`)
 
@@ -72,7 +129,7 @@ To get your SSH key IDs:
 ### Server Configuration
 
 ```yaml
-server_user: "robodeploy" # Non-root user to create
+server_user: "username" # Non-root user to create
 server_packages: # Additional packages to install
   - apt-transport-https
   - ca-certificates
