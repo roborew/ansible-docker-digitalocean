@@ -1,0 +1,118 @@
+---
+# Manual deployment playbook with Capistrano-style releases
+- name: Deploy Applications (Capistrano-style)
+  hosts: digitalocean
+  become: true
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/prod.yml
+  vars:
+    # Default deployment mode
+    deployment_mode: "{{ mode | default('normal') }}" # normal, branch, rollback
+    target_app: "{{ app | default('all') }}"
+    deploy_branch: "{{ branch | default('main') }}"
+    target_release: "{{ release | default('previous') }}"
+    verbose_builds: "{{ verbose | default(false) }}"
+
+  pre_tasks:
+    - name: Display deployment configuration
+      debug:
+        msg: |
+          🚀 Capistrano-style Deployment Configuration:
+
+          Deployment Mode: {{ deployment_mode }}
+          Target App: {{ target_app }}
+          {% if deployment_mode == 'branch' %}
+          Deploy Branch: {{ deploy_branch }}
+          {% elif deployment_mode == 'rollback' %}
+          Rollback Target: {{ target_release }}
+          {% endif %}
+          Verbose Builds: {{ verbose_builds }}
+
+          Available Apps:
+          {% for app in apps %}
+          - {{ app.name }}: {{ app.repo }} ({{ app.branch | default('main') }})
+          {% endfor %}
+
+    - name: Set selected apps for deployment
+      set_fact:
+        selected_apps: "{{ [apps | selectattr('name', 'equalto', target_app) | first] if target_app != 'all' else apps }}"
+
+    - name: Validate target app exists
+      fail:
+        msg: "App '{{ target_app }}' not found. Available apps: {{ apps | map(attribute='name') | join(', ') }}"
+      when: target_app != 'all' and selected_apps | length == 0
+
+    - name: Ensure Docker is running
+      systemd:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Ensure user is in docker group
+      user:
+        name: "{{ server_user }}"
+        groups: docker
+        append: true
+
+  tasks:
+    # Normal deployment
+    - name: Deploy apps (normal mode)
+      include_tasks: ../roles/deploy_apps/tasks/deploy_single_app.yml
+      loop: "{{ selected_apps }}"
+      loop_control:
+        loop_var: app
+      when: deployment_mode == 'normal'
+
+    # Branch deployment
+    - name: Deploy apps (branch mode)
+      include_tasks: ../roles/deploy_apps/tasks/deploy_branch.yml
+      loop: "{{ selected_apps }}"
+      loop_control:
+        loop_var: app
+      when: deployment_mode == 'branch'
+
+    # Rollback deployment
+    - name: Rollback apps
+      include_tasks: ../roles/deploy_apps/tasks/rollback_single_app.yml
+      loop: "{{ selected_apps }}"
+      loop_control:
+        loop_var: app
+      when: deployment_mode == 'rollback'
+
+  post_tasks:
+    - name: Display deployment summary
+      debug:
+        msg: |
+          🎉 Deployment Complete!
+
+          {% if deployment_mode == 'normal' %}
+          📦 Regular Deployment:
+          {% for app in selected_apps %}
+          - {{ app.name }}: https://{{ app.hostname | default(app.name + '.' + ansible_default_ipv4.address + '.nip.io') }}
+          {% endfor %}
+          {% elif deployment_mode == 'branch' %}
+          🌿 Branch Deployment:
+          {% for app in selected_apps %}
+          - {{ app.name }} ({{ deploy_branch }}): Check deployment logs for branch URL
+          {% endfor %}
+          {% elif deployment_mode == 'rollback' %}
+          🔄 Rollback Complete:
+          {% for app in selected_apps %}
+          - {{ app.name }}: Rolled back to {{ target_release }}
+          {% endfor %}
+          {% endif %}
+
+          📝 Useful Commands:
+
+          📊 Check Status:
+          ansible digitalocean -m shell -a "cd /opt/APP_NAME/current && docker compose ps"
+
+          📄 View Logs:
+          ansible digitalocean -m shell -a "cd /opt/APP_NAME/current && docker compose logs"
+
+          📁 List Releases:
+          ansible digitalocean -m shell -a "ls -la /opt/APP_NAME/releases/"
+
+          🔄 Manual Rollback:
+          ansible-playbook playbooks/deploy.yml -e mode=rollback -e app=APP_NAME -e release=RELEASE_ID

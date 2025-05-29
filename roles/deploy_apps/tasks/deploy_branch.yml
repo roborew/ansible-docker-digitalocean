@@ -1,30 +1,36 @@
 ---
-# Capistrano-style deployment for a single app
-# Directory structure: /opt/app-name/{current, releases, shared, repo}
+# Deploy specific branch as separate application for testing
 
-- name: "Set app variables for {{ app.name }}"
+- name: "Set branch deployment variables for {{ app.name }}"
   set_fact:
     app_name: "{{ app.name }}"
     app_repo: "{{ app.repo }}"
-    app_branch: "{{ app.branch | default('main') }}"
-    app_base_dir: "{{ apps_base_dir }}/{{ app.name }}"
-    app_hostname: "{{ app.hostname | default(app.name + '.' + ansible_default_ipv4.address + '.nip.io') }}"
+    app_branch: "{{ deploy_branch }}"
+    original_hostname: "{{ app.hostname | default(app.name + '.' + ansible_default_ipv4.address + '.nip.io') }}"
     app_port: "{{ app.port | default('3000') }}"
-    deploy_timestamp: "{{ ansible_date_time.epoch }}"
-    release_dir: "{{ apps_base_dir }}/{{ app.name }}/releases/{{ ansible_date_time.epoch }}"
+    # Generate subdomain for branch deployment
+    branch_suffix: "{{ deploy_branch | regex_replace('[^a-zA-Z0-9]', '-') | lower }}"
+    random_suffix: "{{ 999999 | random | string }}"
 
-- name: "Display deployment info for {{ app_name }}"
+- name: "Generate branch-specific hostname for {{ app_name }}"
+  set_fact:
+    app_base_dir: "{{ apps_base_dir }}/{{ app_name }}-{{ branch_suffix }}"
+    app_hostname: "{{ branch_suffix }}-{{ random_suffix }}.{{ original_hostname.split('.')[1:] | join('.') if '.' in original_hostname else 'localhost' }}"
+    deploy_timestamp: "{{ ansible_date_time.epoch }}"
+    release_dir: "{{ apps_base_dir }}/{{ app_name }}-{{ branch_suffix }}/releases/{{ ansible_date_time.epoch }}"
+
+- name: "Display branch deployment info for {{ app_name }}"
   debug:
     msg: |
-      🚀 Deploying {{ app_name }} (Capistrano-style):
+      🌿 Deploying {{ app_name }} branch '{{ app_branch }}':
       - Repository: {{ app_repo }}
       - Branch: {{ app_branch }}
       - Base Directory: {{ app_base_dir }}
+      - Branch Hostname: {{ app_hostname }}
+      - Original Hostname: {{ original_hostname }}
       - Release: {{ deploy_timestamp }}
-      - Hostname: {{ app_hostname }}
-      - Port: {{ app_port }}
 
-- name: "Create Capistrano directory structure for {{ app_name }}"
+- name: "Create Capistrano directory structure for branch {{ app_name }}"
   file:
     path: "{{ item }}"
     state: directory
@@ -40,17 +46,17 @@
     - "{{ app_base_dir }}/shared/data"
     - "{{ app_base_dir }}/backups"
 
-- name: "Clone repository to repo cache for {{ app_name }}"
+- name: "Clone repository branch to repo cache for {{ app_name }}"
   git:
     repo: "{{ app_repo }}"
     dest: "{{ app_base_dir }}/repo"
     version: "{{ app_branch }}"
-    force: "{{ git_force_update | default(true) }}"
-    accept_hostkey: "{{ git_accept_hostkey | default(true) }}"
+    force: true
+    accept_hostkey: true
   become: true
   become_user: "{{ apps_user }}"
 
-- name: "Create new release directory for {{ app_name }}"
+- name: "Create new release directory for branch {{ app_name }}"
   file:
     path: "{{ release_dir }}"
     state: directory
@@ -58,7 +64,7 @@
     group: "{{ apps_group }}"
     mode: "0755"
 
-- name: "Copy code to release directory for {{ app_name }}"
+- name: "Copy code to release directory for branch {{ app_name }}"
   synchronize:
     src: "{{ app_base_dir }}/repo/"
     dest: "{{ release_dir }}/"
@@ -68,25 +74,17 @@
   become: true
   become_user: "{{ apps_user }}"
 
-- name: "Check if .env.vault exists for {{ app_name }}"
-  stat:
-    path: "{{ app_base_dir }}/shared/config/.env.vault"
-  register: env_vault_exists
+- name: "Copy main app .env file to branch deployment (if exists)"
+  copy:
+    src: "{{ apps_base_dir }}/{{ app_name }}/shared/config/.env"
+    dest: "{{ app_base_dir }}/shared/config/.env"
+    remote_src: true
+    owner: "{{ apps_user }}"
+    group: "{{ apps_group }}"
+    mode: "0644"
+  ignore_errors: true
 
-- name: "Decrypt .env file for {{ app_name }}"
-  shell: |
-    if [ -f "{{ app_base_dir }}/shared/config/.env.vault" ]; then
-      ansible-vault decrypt "{{ app_base_dir }}/shared/config/.env.vault" --output="{{ app_base_dir }}/shared/config/.env"
-      echo "✅ .env file decrypted"
-    else
-      echo "⚠️  No .env.vault found, skipping decryption"
-    fi
-  become: true
-  become_user: "{{ apps_user }}"
-  register: env_decrypt_result
-  when: env_vault_exists.stat.exists
-
-- name: "Create symlinks to shared files for {{ app_name }}"
+- name: "Create symlinks to shared files for branch {{ app_name }}"
   file:
     src: "{{ item.src }}"
     dest: "{{ item.dest }}"
@@ -103,36 +101,35 @@
   become_user: "{{ apps_user }}"
   ignore_errors: true
 
-- name: "Check if docker-compose.yml exists for {{ app_name }}"
+- name: "Check if docker-compose.yml exists for branch {{ app_name }}"
   stat:
     path: "{{ release_dir }}/docker-compose.yml"
   register: compose_file
 
-- name: "Check if compose.yml exists for {{ app_name }}"
+- name: "Check if compose.yml exists for branch {{ app_name }}"
   stat:
     path: "{{ release_dir }}/compose.yml"
   register: compose_file_alt
   when: not compose_file.stat.exists
 
-- name: "Fail if no compose file found for {{ app_name }}"
+- name: "Fail if no compose file found for branch {{ app_name }}"
   fail:
     msg: "No docker-compose.yml or compose.yml found in {{ release_dir }}"
   when: not compose_file.stat.exists and not compose_file_alt.stat.exists
 
-- name: "Stop existing containers for {{ app_name }}"
+- name: "Stop existing branch containers for {{ app_name }}"
   shell: |
     if [ -L "{{ app_base_dir }}/current" ] && [ -f "{{ app_base_dir }}/current/docker-compose.yml" -o -f "{{ app_base_dir }}/current/compose.yml" ]; then
       cd "{{ app_base_dir }}/current"
       {{ compose_command }} down || true
-      echo "🛑 Stopped existing containers"
+      echo "🛑 Stopped existing branch containers"
     else
-      echo "ℹ️  No existing deployment to stop"
+      echo "ℹ️  No existing branch deployment to stop"
     fi
   become: true
   become_user: "{{ apps_user }}"
-  register: stop_result
 
-- name: "Check if app needs to be built from source"
+- name: "Check if branch app needs to be built from source"
   shell: "{{ compose_command }} config | grep -q 'build:'"
   args:
     chdir: "{{ release_dir }}"
@@ -142,15 +139,15 @@
   failed_when: false
   changed_when: false
 
-- name: "Build {{ app_name }} with progress output"
+- name: "Build {{ app_name }} branch with progress output"
   shell: |
-    echo "🏗️  Building {{ app_name }} release {{ deploy_timestamp }}..."
-    {{ compose_command }} build --progress=plain {{ '--no-cache' if force_rebuild | default(false) else '' }} 2>&1 | tee "{{ app_base_dir }}/shared/logs/build_{{ deploy_timestamp }}.log"
+    echo "🏗️  Building {{ app_name }} branch {{ app_branch }} (release {{ deploy_timestamp }})..."
+    {{ compose_command }} build --progress=plain 2>&1 | tee "{{ app_base_dir }}/shared/logs/build_{{ deploy_timestamp }}.log"
     build_exit_code=$?
     if [ $build_exit_code -eq 0 ]; then
-      echo "✅ Build completed successfully"
+      echo "✅ Branch build completed successfully"
     else
-      echo "❌ Build failed with exit code $build_exit_code"
+      echo "❌ Branch build failed with exit code $build_exit_code"
     fi
     exit $build_exit_code
   args:
@@ -164,26 +161,25 @@
   register: build_result
   when: needs_build.rc == 0
 
-- name: "Create current symlink (atomic deployment) for {{ app_name }}"
+- name: "Create current symlink for branch {{ app_name }}"
   shell: |
-    # Atomic deployment using symlink swap
     cd "{{ app_base_dir }}"
     ln -sfn "releases/{{ deploy_timestamp }}" current_tmp
     mv current_tmp current
-    echo "🔗 Current symlink updated to release {{ deploy_timestamp }}"
+    echo "🔗 Current symlink updated for branch deployment"
   become: true
   become_user: "{{ apps_user }}"
 
-- name: "Start {{ app_name }} from current release"
+- name: "Start {{ app_name }} branch from current release"
   shell: |
-    echo "🚀 Starting {{ app_name }} from current release..."
+    echo "🚀 Starting {{ app_name }} branch {{ app_branch }} from current release..."
     cd "{{ app_base_dir }}/current"
     {{ compose_command }} up -d 2>&1 | tee "{{ app_base_dir }}/shared/logs/deploy_{{ deploy_timestamp }}.log"
     deploy_exit_code=$?
     if [ $deploy_exit_code -eq 0 ]; then
-      echo "✅ Deployment completed successfully"
+      echo "✅ Branch deployment completed successfully"
     else
-      echo "❌ Deployment failed with exit code $deploy_exit_code"
+      echo "❌ Branch deployment failed with exit code $deploy_exit_code"
     fi
     exit $deploy_exit_code
   become: true
@@ -194,16 +190,16 @@
     PROXY_NETWORK: "{{ proxy_network_name }}"
   register: deploy_result
 
-- name: "Wait for {{ app_name }} containers to be ready"
+- name: "Wait for {{ app_name }} branch containers to be ready"
   wait_for:
     timeout: 30
   delegate_to: localhost
   become: false
 
-- name: "Verify {{ app_name }} containers are running"
+- name: "Verify {{ app_name }} branch containers are running"
   shell: |
     cd "{{ app_base_dir }}/current"
-    echo "📊 Container Status for {{ app_name }}:"
+    echo "📊 Container Status for {{ app_name }} branch {{ app_branch }}:"
     {{ compose_command }} ps
     echo ""
     echo "🏥 Health Check:"
@@ -213,47 +209,40 @@
   register: health_check
   changed_when: false
 
-- name: "Clean up old releases for {{ app_name }}"
-  shell: |
-    cd "{{ app_base_dir }}/releases"
-    # Keep only the latest 5 releases
-    ls -1t | tail -n +6 | xargs -r rm -rf
-    echo "🧹 Cleaned up old releases (keeping latest 5)"
-  become: true
-  become_user: "{{ apps_user }}"
-  ignore_errors: true
-
-- name: "Save deployment metadata for {{ app_name }}"
+- name: "Save branch deployment metadata for {{ app_name }}"
   copy:
     content: |
       {
         "app_name": "{{ app_name }}",
+        "deployment_type": "branch",
         "repository": "{{ app_repo }}",
         "branch": "{{ app_branch }}",
         "release": "{{ deploy_timestamp }}",
         "deployed_at": "{{ ansible_date_time.iso8601 }}",
         "deployed_by": "{{ ansible_user_id }}",
         "hostname": "{{ app_hostname }}",
-        "port": "{{ app_port }}"
+        "port": "{{ app_port }}",
+        "original_hostname": "{{ original_hostname }}",
+        "branch_suffix": "{{ branch_suffix }}"
       }
     dest: "{{ release_dir }}/.deploy_metadata.json"
     owner: "{{ apps_user }}"
     group: "{{ apps_group }}"
     mode: "0644"
 
-- name: "Display {{ app_name }} deployment summary"
+- name: "Display {{ app_name }} branch deployment summary"
   debug:
     msg: |
-      🎉 {{ app_name }} deployment complete!
+      🌿 {{ app_name }} branch deployment complete!
 
       📁 Directory Structure:
       - Base: {{ app_base_dir }}
       - Current: {{ app_base_dir }}/current -> releases/{{ deploy_timestamp }}
       - Shared: {{ app_base_dir }}/shared
-      - Backups: {{ app_base_dir }}/backups
 
       🌐 Access:
-      - URL: https://{{ app_hostname }}
+      - Branch URL: https://{{ app_hostname }}
+      - Original URL: https://{{ original_hostname }}
       - Port: {{ app_port }}
 
       📊 Status:

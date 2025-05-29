@@ -1,12 +1,14 @@
 # Ansible DigitalOcean Deployment
 
-This Ansible project automates the provisioning and configuration of DigitalOcean droplets with Docker, tmux, and security configurations. It includes an advanced application deployment system with automatic reverse proxy and TLS certificate management.
+This Ansible project automates the provisioning and configuration of DigitalOcean droplets with Docker, tmux, and security configurations. It includes an advanced **Capistrano-style deployment system** with automatic reverse proxy, TLS certificate management, zero-downtime deployments, and rollback capabilities.
 
 ## Features
 
 - 🚀 **Automated Droplet Provisioning**: Create DigitalOcean droplets with custom configurations
 - 🐳 **Docker Installation**: Automatically installs and configures Docker CE
-- 🔄 **Application Deployment**: Git-based deployment system with automatic updates
+- 🎯 **Capistrano-Style Deployments**: Zero-downtime deployments with releases, rollbacks, and branch deployments
+- 🔄 **Release Management**: Keeps deployment history with instant rollback capability
+- 🌿 **Branch Deployments**: Deploy any branch as separate staging environment
 - 🌐 **Reverse Proxy**: Caddy Docker Proxy with automatic TLS certificates
 - 🔒 **Security Setup**: Configures UFW firewall with specified rules
 - 👤 **User Management**: Creates a non-root user with Docker access
@@ -47,7 +49,20 @@ This Ansible project automates the provisioning and configuration of DigitalOcea
    nano group_vars/prod.yml     # Add your applications
    ```
 
-3. **Deploy** (with automatic validation & encryption):
+3. **Setup Environment Files** (for your applications):
+
+   ```bash
+   # Create environment file templates for each app
+   ansible-playbook playbooks/manage-env.yml -e action=create -e app_name=rekalled
+
+   # Edit the environment files
+   ./scripts/manage-env.sh edit rekalled
+
+   # Encrypt them for security
+   ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name=rekalled
+   ```
+
+4. **Deploy** (with automatic validation & encryption):
    ```bash
    ansible-playbook playbooks/provision-and-configure.yml
    ansible-playbook playbooks/deploy-stack.yml
@@ -63,8 +78,209 @@ ansible-playbook playbooks/deploy-stack.yml
 
 - Environment variables are loaded from `.env` file
 - Configuration files are validated and encrypted automatically
+- App environment files are checked and validated
 - SSH keys and DigitalOcean API are tested before deployment
 - System readiness is verified before any deployment tasks run
+
+## 🎯 **Capistrano-Style Deployment System**
+
+This project includes a complete **Capistrano-style deployment system** that provides zero-downtime deployments, release management, rollbacks, and branch deployments for your applications.
+
+### **📁 Directory Structure**
+
+Each application is deployed using the following Capistrano-style structure:
+
+```
+/opt/your-app/
+├── current -> releases/1640995200/     # Symlink to active release
+├── releases/                           # All deployments (keeps last 5)
+│   ├── 1640995200/                    # Release 1 (timestamp-based)
+│   ├── 1640995300/                    # Release 2
+│   └── 1640995400/                    # Release 3 (current)
+├── shared/                            # Persistent files across deployments
+│   ├── config/
+│   │   ├── .env                       # Environment variables (decrypted)
+│   │   └── .env.vault                 # Environment variables (encrypted)
+│   ├── logs/                          # Deployment and application logs
+│   │   ├── build_1640995400.log       # Build log for each release
+│   │   └── deploy_1640995400.log      # Deploy log for each release
+│   └── data/                          # Persistent application data
+├── repo/                              # Git repository cache
+└── backups/                           # Database backups (future feature)
+```
+
+### **🚀 Deployment Commands**
+
+#### **Initial Setup & Main Deployments**
+
+```bash
+# Initial setup (creates Capistrano structure + deploys main branch)
+ansible-playbook playbooks/deploy-stack.yml
+
+# Deploy main branch (subsequent deployments)
+ansible-playbook playbooks/deploy.yml
+
+# Deploy with verbose build output
+ansible-playbook playbooks/deploy.yml -e verbose=true
+
+# Deploy specific app only
+ansible-playbook playbooks/deploy.yml -e app=rekalled
+```
+
+#### **Branch Deployments (Testing & Staging)**
+
+```bash
+# Deploy any branch as separate staging environment
+ansible-playbook playbooks/deploy.yml -e mode=branch -e branch=feature-auth
+
+# Deploy specific app branch
+ansible-playbook playbooks/deploy.yml -e mode=branch -e branch=hotfix-123 -e app=rekalled
+
+# Deploy branch with unique subdomain (automatic)
+# Creates: feature-auth-456789.yourdomain.com
+```
+
+#### **Rollback Commands**
+
+```bash
+# Rollback to previous release (instant)
+ansible-playbook playbooks/deploy.yml -e mode=rollback
+
+# Rollback to specific release
+ansible-playbook playbooks/deploy.yml -e mode=rollback -e release=1640995200
+
+# Rollback specific app only
+ansible-playbook playbooks/deploy.yml -e mode=rollback -e app=rekalled
+```
+
+#### **System Testing & Monitoring**
+
+```bash
+# Test the entire deployment system
+ansible-playbook playbooks/test-deployment.yml
+
+# Quick status check
+ansible digitalocean -m shell -a "cd /opt/rekalled/current && docker compose ps"
+
+# View recent deployment logs
+ansible digitalocean -m shell -a "ls -la /opt/rekalled/shared/logs/"
+
+# Check available releases
+ansible digitalocean -m shell -a "ls -la /opt/rekalled/releases/"
+```
+
+### **🔐 Environment File Management**
+
+Environment files are managed securely with encryption and proper deployment:
+
+#### **📍 Environment File Locations**
+
+| Location                                 | Purpose                   | Security       |
+| ---------------------------------------- | ------------------------- | -------------- |
+| `env_files/rekalled.env`                 | Local editing (temporary) | ⚠️ Unencrypted |
+| `env_files/rekalled.env.vault`           | Local storage             | ✅ Encrypted   |
+| `/opt/rekalled/shared/config/.env.vault` | Server storage            | ✅ Encrypted   |
+| `/opt/rekalled/shared/config/.env`       | Server runtime            | ⚠️ Decrypted   |
+| `/opt/rekalled/current/.env`             | Application access        | 🔗 Symlink     |
+
+#### **🔧 Environment Management Commands**
+
+```bash
+# Create new .env template
+ansible-playbook playbooks/manage-env.yml -e action=create -e app_name=rekalled
+
+# Edit .env file locally (quick helper)
+./scripts/manage-env.sh edit rekalled
+
+# Encrypt .env file for security
+ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name=rekalled
+
+# Deploy encrypted .env to server
+ansible-playbook playbooks/manage-env.yml -e action=deploy -e app_name=rekalled
+
+# List all managed .env files
+ansible-playbook playbooks/manage-env.yml -e action=list
+
+# Get help
+ansible-playbook playbooks/manage-env.yml
+```
+
+#### **🔄 Environment Workflow**
+
+1. **Create**: Generate .env template with secure defaults
+2. **Edit**: Modify values for your application needs
+3. **Encrypt**: Secure the file with ansible-vault
+4. **Deploy**: Upload encrypted file to server
+5. **Auto-Decrypt**: File is automatically decrypted during deployment and symlinked
+
+### **🌟 Key Features**
+
+✅ **Zero-downtime deployments** - Atomic symlink swaps  
+✅ **Release management** - Keeps last 5 releases automatically  
+✅ **Instant rollbacks** - Rollback to any previous release in seconds  
+✅ **Branch deployments** - Deploy any branch as separate app with unique subdomain  
+✅ **Environment encryption** - .env files encrypted with ansible-vault  
+✅ **Shared file management** - Logs, data, config persist across deployments  
+✅ **Deployment metadata** - Track who deployed what when  
+✅ **Comprehensive logging** - Build and deploy logs for each release  
+✅ **Health checks** - Verify containers are running after deployment  
+✅ **Automatic cleanup** - Old releases cleaned up automatically
+
+### **📊 Monitoring & Status**
+
+```bash
+# View deployment system status
+ansible-playbook playbooks/test-deployment.yml
+
+# Check specific app status
+ansible digitalocean -m shell -a "cd /opt/rekalled/current && docker compose ps"
+
+# View deployment logs
+ansible digitalocean -m shell -a "tail -f /opt/rekalled/shared/logs/deploy_*.log"
+
+# Check release history
+ansible digitalocean -m shell -a "ls -lat /opt/rekalled/releases/"
+
+# View application logs
+ansible digitalocean -m shell -a "cd /opt/rekalled/current && docker compose logs --tail=50"
+```
+
+### **🔄 Typical Workflow**
+
+1. **Initial Setup** (one-time, follows Quick Start guide):
+
+   ```bash
+   # Bootstrap project (includes environment file setup)
+   ./scripts/bootstrap.sh
+
+   # Configure settings and create environment files
+   nano .env && nano group_vars/prod.yml
+
+   # Create and encrypt app environment files
+   ansible-playbook playbooks/manage-env.yml -e action=create -e app_name=rekalled
+   ./scripts/manage-env.sh edit rekalled
+   ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name=rekalled
+
+   # Deploy everything
+   ansible-playbook playbooks/deploy-stack.yml
+   ```
+
+2. **Regular Deployments**:
+
+   ```bash
+   ansible-playbook playbooks/deploy.yml
+   ```
+
+3. **Feature Branch Testing**:
+
+   ```bash
+   ansible-playbook playbooks/deploy.yml -e mode=branch -e branch=new-feature
+   ```
+
+4. **Emergency Rollback**:
+   ```bash
+   ansible-playbook playbooks/deploy.yml -e mode=rollback
+   ```
 
 ### **🔑 Vault Password Management**
 

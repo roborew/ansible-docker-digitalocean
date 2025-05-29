@@ -1,0 +1,215 @@
+---
+# .env file management playbook for Capistrano deployments
+- name: Manage Environment Files
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    action: "{{ action | default('help') }}" # create, encrypt, decrypt, deploy, backup, list
+    app_name: "{{ app_name | default('') }}"
+    env_files_dir: "{{ playbook_dir }}/../env_files"
+
+  tasks:
+    - name: "🔐 Environment File Management"
+      debug:
+        msg: |
+          Action: {{ action }}
+          App: {{ app_name }}
+          ================================
+
+    - name: "❌ Validate required parameters"
+      fail:
+        msg: "app_name is required for {{ action }} action"
+      when: action in ['create', 'encrypt', 'decrypt', 'deploy'] and app_name == ''
+
+    # CREATE ACTION
+    - block:
+        - name: "📁 Create env_files directory"
+          file:
+            path: "{{ env_files_dir }}"
+            state: directory
+            mode: "0755"
+
+        - name: "🆕 Create .env template for {{ app_name }}"
+          template:
+            src: "../templates/env-template.j2"
+            dest: "{{ env_files_dir }}/{{ app_name }}.env"
+            mode: "0600"
+          vars:
+            app_name_var: "{{ app_name }}"
+            created_date: "{{ ansible_date_time.iso8601 }}"
+
+        - name: "✅ Created .env template"
+          debug:
+            msg: |
+              Created .env template at: {{ env_files_dir }}/{{ app_name }}.env
+
+              Next steps:
+              1. Edit the file: nano {{ env_files_dir }}/{{ app_name }}.env
+              2. Encrypt it: ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name={{ app_name }}
+              3. Deploy it: ansible-playbook playbooks/manage-env.yml -e action=deploy -e app_name={{ app_name }}
+      when: action == 'create'
+
+    # ENCRYPT ACTION
+    - block:
+        - name: "🔒 Check if .env file exists for {{ app_name }}"
+          stat:
+            path: "{{ env_files_dir }}/{{ app_name }}.env"
+          register: env_file_check
+
+        - name: "❌ .env file not found"
+          fail:
+            msg: ".env file not found at {{ env_files_dir }}/{{ app_name }}.env. Create it first with action=create"
+          when: not env_file_check.stat.exists
+
+        - name: "🔐 Encrypt .env file for {{ app_name }}"
+          shell: |
+            ansible-vault encrypt "{{ env_files_dir }}/{{ app_name }}.env" --output="{{ env_files_dir }}/{{ app_name }}.env.vault" --vault-password-file="{{ playbook_dir }}/../.vault_pass"
+          register: encrypt_result
+
+        - name: "🗑️ Remove unencrypted file for security"
+          file:
+            path: "{{ env_files_dir }}/{{ app_name }}.env"
+            state: absent
+
+        - name: "✅ Encryption complete"
+          debug:
+            msg: |
+              Encrypted .env file saved as: {{ env_files_dir }}/{{ app_name }}.env.vault
+              Unencrypted file removed for security
+      when: action == 'encrypt'
+
+    # DECRYPT ACTION
+    - block:
+        - name: "🔓 Check if encrypted .env file exists for {{ app_name }}"
+          stat:
+            path: "{{ env_files_dir }}/{{ app_name }}.env.vault"
+          register: vault_file_check
+
+        - name: "❌ Encrypted .env file not found"
+          fail:
+            msg: "Encrypted .env file not found at {{ env_files_dir }}/{{ app_name }}.env.vault"
+          when: not vault_file_check.stat.exists
+
+        - name: "🔓 Decrypt .env file for {{ app_name }}"
+          shell: |
+            ansible-vault decrypt "{{ env_files_dir }}/{{ app_name }}.env.vault" --output="{{ env_files_dir }}/{{ app_name }}.env" --vault-password-file="{{ playbook_dir }}/../.vault_pass"
+
+        - name: "✅ Decryption complete"
+          debug:
+            msg: |
+              Decrypted .env file saved as: {{ env_files_dir }}/{{ app_name }}.env
+              ⚠️  Remember to encrypt again after editing!
+      when: action == 'decrypt'
+
+    # DEPLOY ACTION
+    - block:
+        - name: "🚀 Check if encrypted .env file exists for {{ app_name }}"
+          stat:
+            path: "{{ env_files_dir }}/{{ app_name }}.env.vault"
+          register: deploy_vault_check
+
+        - name: "❌ Encrypted .env file not found for deployment"
+          fail:
+            msg: |
+              Encrypted .env file not found at {{ env_files_dir }}/{{ app_name }}.env.vault
+              Create and encrypt it first:
+                ansible-playbook playbooks/manage-env.yml -e action=create -e app_name={{ app_name }}
+                ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name={{ app_name }}
+          when: not deploy_vault_check.stat.exists
+
+        - name: "📤 Deploy encrypted .env file to server"
+          copy:
+            src: "{{ env_files_dir }}/{{ app_name }}.env.vault"
+            dest: "/opt/{{ app_name }}/shared/config/.env.vault"
+            owner: "{{ server_user }}"
+            group: "{{ server_user }}"
+            mode: "0600"
+          delegate_to: "{{ groups['digitalocean'][0] }}"
+          become: true
+
+        - name: "✅ Deployment complete"
+          debug:
+            msg: |
+              Encrypted .env file deployed to server: /opt/{{ app_name }}/shared/config/.env.vault
+              It will be automatically decrypted during the next deployment
+      when: action == 'deploy'
+
+    # LIST ACTION
+    - block:
+        - name: "📁 Check if env_files directory exists"
+          stat:
+            path: "{{ env_files_dir }}"
+          register: env_dir_check
+
+        - name: "📋 List local .env files"
+          find:
+            paths: "{{ env_files_dir }}"
+            patterns: "*.env*"
+          register: local_env_files
+          when: env_dir_check.stat.exists
+
+        - name: "📋 List server .env files"
+          find:
+            paths: "/opt"
+            patterns: ".env*"
+            file_type: file
+            recurse: true
+          delegate_to: "{{ groups['digitalocean'][0] }}"
+          become: true
+          register: server_env_files
+          ignore_errors: true
+
+        - name: "📄 Environment files listing"
+          debug:
+            msg: |
+              📁 Local .env files ({{ env_files_dir }}):
+              {% if env_dir_check.stat.exists and local_env_files.files %}
+              {% for file in local_env_files.files %}
+              - {{ file.path | basename }}
+              {% endfor %}
+              {% else %}
+              - No local .env files found
+              {% endif %}
+
+              🌐 Server .env files:
+              {% if server_env_files.files is defined %}
+              {% for file in server_env_files.files %}
+              - {{ file.path }}
+              {% endfor %}
+              {% else %}
+              - No server .env files found
+              {% endif %}
+      when: action == 'list'
+
+    # HELP ACTION
+    - name: "📚 Display usage help"
+      debug:
+        msg: |
+          🔐 Environment File Management
+          ==============================
+
+          Usage: ansible-playbook playbooks/manage-env.yml -e action=ACTION -e app_name=APP
+
+          Actions:
+          --------
+          create    Create new .env template for app
+          encrypt   Encrypt existing .env file with ansible-vault
+          decrypt   Decrypt .env.vault file for editing  
+          deploy    Deploy encrypted .env file to server
+          list      List all managed .env files
+
+          Examples:
+          ---------
+          ansible-playbook playbooks/manage-env.yml -e action=create -e app_name=rekalled
+          ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name=rekalled
+          ansible-playbook playbooks/manage-env.yml -e action=deploy -e app_name=rekalled
+          ansible-playbook playbooks/manage-env.yml -e action=list
+
+          Workflow:
+          ---------
+          1. Create template: action=create
+          2. Edit the file manually
+          3. Encrypt: action=encrypt
+          4. Deploy to server: action=deploy
+      when: action == 'help' or action not in ['create', 'encrypt', 'decrypt', 'deploy', 'list']

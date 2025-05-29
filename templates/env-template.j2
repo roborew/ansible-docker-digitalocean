@@ -1,0 +1,20 @@
+# Environment configuration for {{ app_name_var }}
+# Created: {{ created_date }}
+
+# Database
+DATABASE_URL=postgresql://user:password@localhost:5432/{{ app_name_var }}_production
+
+# Application
+APP_ENV=production
+APP_NAME={{ app_name_var }}
+APP_PORT=3000
+
+# Security
+SECRET_KEY_BASE={{ lookup('password', '/dev/null length=64 chars=ascii_letters,digits') }}
+JWT_SECRET={{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}
+
+# External Services
+# REDIS_URL=redis://localhost:6379
+# MAIL_URL=smtp://user:pass@smtp.example.com:587
+
+# Add your app-specific environment variables below: 

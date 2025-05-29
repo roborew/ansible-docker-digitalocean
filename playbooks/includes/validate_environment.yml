@@ -135,6 +135,70 @@
   delegate_to: localhost
   changed_when: false
 
+- name: Load apps configuration to validate environment files
+  include_vars:
+    file: "{{ playbook_dir }}/../group_vars/prod.yml"
+    name: prod_config
+  delegate_to: localhost
+
+- name: Validate app environment files exist
+  block:
+    - name: Check for env_files directory
+      stat:
+        path: "{{ playbook_dir }}/../env_files"
+      register: env_files_dir
+      delegate_to: localhost
+
+    - name: Check each app has encrypted environment file
+      stat:
+        path: "{{ playbook_dir }}/../env_files/{{ item.name }}.env.vault"
+      register: app_env_files
+      delegate_to: localhost
+      loop: "{{ prod_config.apps | default([]) }}"
+      when: prod_config.apps is defined
+
+    - name: List missing environment files
+      set_fact:
+        missing_env_files: "{{ app_env_files.results | selectattr('stat.exists', 'equalto', false) | map(attribute='item.name') | list }}"
+      delegate_to: localhost
+      when: prod_config.apps is defined
+
+    - name: Display environment file status
+      debug:
+        msg: |
+          📁 Environment Files Status:
+          {% if prod_config.apps is defined %}
+          {% for app in prod_config.apps %}
+          {% set env_exists = app_env_files.results | selectattr('item.name', 'equalto', app.name) | map(attribute='stat.exists') | first %}
+          - {{ app.name }}: {{ '✅ env_files/' + app.name + '.env.vault' if env_exists else '❌ Missing' }}
+          {% endfor %}
+          {% else %}
+          - No apps configured in group_vars/prod.yml
+          {% endif %}
+      delegate_to: localhost
+      when: prod_config.apps is defined
+
+    - name: Provide instructions for missing environment files
+      debug:
+        msg: |
+          🔧 Missing Environment Files - Create them with:
+          {% for app_name in missing_env_files %}
+          ansible-playbook playbooks/manage-env.yml -e action=create -e app_name={{ app_name }}
+          ./scripts/manage-env.sh edit {{ app_name }}
+          ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name={{ app_name }}
+          {% endfor %}
+      delegate_to: localhost
+      when: prod_config.apps is defined and missing_env_files | length > 0
+
+    - name: Fail if environment files are missing
+      fail:
+        msg: |
+          ❌ Missing encrypted environment files for: {{ missing_env_files | join(', ') }}
+          Create them using the commands shown above.
+      delegate_to: localhost
+      when: prod_config.apps is defined and missing_env_files | length > 0
+  when: prod_config.apps is defined and (prod_config.apps | length > 0)
+
 - name: Test DigitalOcean API connection
   uri:
     url: "https://api.digitalocean.com/v2/account"
@@ -170,7 +234,8 @@
     msg: |
       Environment is ready for deployment!
       ✅ Configuration files exist
-      ✅ Vault files are encrypted  
+      ✅ Vault files are encrypted
+      ✅ App environment files ready
       ✅ DigitalOcean API connection verified
       ✅ SSH keys validated
       🚀 Proceeding with deployment...

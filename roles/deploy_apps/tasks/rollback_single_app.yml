@@ -1,0 +1,159 @@
+---
+# Rollback functionality for Capistrano-style deployments
+
+- name: "Set app variables for {{ app.name }}"
+  set_fact:
+    app_name: "{{ app.name }}"
+    app_base_dir: "{{ apps_base_dir }}/{{ app.name }}"
+    rollback_target: "{{ target_release | default('previous') }}"
+
+- name: "Display rollback info for {{ app_name }}"
+  debug:
+    msg: |
+      🔄 Rolling back {{ app_name }}:
+      - Target: {{ rollback_target }}
+      - Base Directory: {{ app_base_dir }}
+
+- name: "Check if current deployment exists for {{ app_name }}"
+  stat:
+    path: "{{ app_base_dir }}/current"
+  register: current_exists
+
+- name: "Get current release for {{ app_name }}"
+  shell: |
+    if [ -L "{{ app_base_dir }}/current" ]; then
+      readlink "{{ app_base_dir }}/current" | sed 's|releases/||'
+    else
+      echo "none"
+    fi
+  register: current_release_result
+  when: current_exists.stat.exists
+
+- name: "List available releases for {{ app_name }}"
+  shell: |
+    cd "{{ app_base_dir }}/releases"
+    ls -1t | head -10
+  register: available_releases
+  become: true
+  become_user: "{{ apps_user }}"
+
+- name: "Determine rollback target for {{ app_name }}"
+  shell: |
+    cd "{{ app_base_dir }}/releases"
+    if [ "{{ rollback_target }}" = "previous" ]; then
+      # Get the second most recent release (skip current)
+      current="{{ current_release_result.stdout | default('') }}"
+      if [ -n "$current" ]; then
+        ls -1t | grep -v "^$current$" | head -1
+      else
+        ls -1t | head -1
+      fi
+    else
+      # Use specific release
+      echo "{{ rollback_target }}"
+    fi
+  register: target_release_result
+  become: true
+  become_user: "{{ apps_user }}"
+
+- name: "Validate rollback target exists for {{ app_name }}"
+  stat:
+    path: "{{ app_base_dir }}/releases/{{ target_release_result.stdout }}"
+  register: target_exists
+
+- name: "Fail if rollback target doesn't exist for {{ app_name }}"
+  fail:
+    msg: |
+      Rollback target '{{ target_release_result.stdout }}' not found for {{ app_name }}.
+      Available releases: {{ available_releases.stdout_lines | join(', ') }}
+  when: not target_exists.stat.exists
+
+- name: "Stop current containers for {{ app_name }}"
+  shell: |
+    if [ -L "{{ app_base_dir }}/current" ] && [ -f "{{ app_base_dir }}/current/docker-compose.yml" -o -f "{{ app_base_dir }}/current/compose.yml" ]; then
+      cd "{{ app_base_dir }}/current"
+      {{ compose_command }} down || true
+      echo "🛑 Stopped current containers"
+    else
+      echo "ℹ️  No current deployment to stop"
+    fi
+  become: true
+  become_user: "{{ apps_user }}"
+
+- name: "Update current symlink to rollback target for {{ app_name }}"
+  shell: |
+    cd "{{ app_base_dir }}"
+    ln -sfn "releases/{{ target_release_result.stdout }}" current_tmp
+    mv current_tmp current
+    echo "🔗 Current symlink updated to release {{ target_release_result.stdout }}"
+  become: true
+  become_user: "{{ apps_user }}"
+
+- name: "Start {{ app_name }} from rollback release"
+  shell: |
+    echo "🚀 Starting {{ app_name }} from rollback release {{ target_release_result.stdout }}..."
+    cd "{{ app_base_dir }}/current"
+    {{ compose_command }} up -d 2>&1 | tee "{{ app_base_dir }}/shared/logs/rollback_{{ ansible_date_time.epoch }}.log"
+    deploy_exit_code=$?
+    if [ $deploy_exit_code -eq 0 ]; then
+      echo "✅ Rollback completed successfully"
+    else
+      echo "❌ Rollback failed with exit code $deploy_exit_code"
+    fi
+    exit $deploy_exit_code
+  become: true
+  become_user: "{{ apps_user }}"
+  environment:
+    PROXY_NETWORK: "{{ proxy_network_name }}"
+  register: rollback_result
+
+- name: "Wait for {{ app_name }} containers to be ready"
+  wait_for:
+    timeout: 30
+  delegate_to: localhost
+  become: false
+
+- name: "Verify {{ app_name }} containers are running after rollback"
+  shell: |
+    cd "{{ app_base_dir }}/current"
+    echo "📊 Container Status for {{ app_name }} (after rollback):"
+    {{ compose_command }} ps
+    echo ""
+    echo "🏥 Health Check:"
+    {{ compose_command }} logs --tail=10
+  become: true
+  become_user: "{{ apps_user }}"
+  register: rollback_health_check
+  changed_when: false
+
+- name: "Save rollback metadata for {{ app_name }}"
+  copy:
+    content: |
+      {
+        "app_name": "{{ app_name }}",
+        "action": "rollback",
+        "target_release": "{{ target_release_result.stdout }}",
+        "previous_release": "{{ current_release_result.stdout | default('none') }}",
+        "rolled_back_at": "{{ ansible_date_time.iso8601 }}",
+        "rolled_back_by": "{{ ansible_user_id }}"
+      }
+    dest: "{{ app_base_dir }}/current/.rollback_metadata.json"
+    owner: "{{ apps_user }}"
+    group: "{{ apps_group }}"
+    mode: "0644"
+
+- name: "Display {{ app_name }} rollback summary"
+  debug:
+    msg: |
+      🔄 {{ app_name }} rollback complete!
+
+      📁 Rollback Details:
+      - From: {{ current_release_result.stdout | default('none') }}
+      - To: {{ target_release_result.stdout }}
+      - Current: {{ app_base_dir }}/current -> releases/{{ target_release_result.stdout }}
+
+      📊 Status:
+      {{ rollback_health_check.stdout }}
+
+      📝 Rollback Log:
+      - {{ app_base_dir }}/shared/logs/rollback_{{ ansible_date_time.epoch }}.log
