@@ -1,6 +1,6 @@
 # Server Configuration
 do_region: "lon1" # London region
-do_size: "s-1vcpu-1gb-amd" # Basic AMD with 1GB RAM
+do_size: "s-2vcpu-2gb-amd" # Basic AMD with 1GB RAM
 do_image: "ubuntu-24-04-x64" # Ubuntu 24.04 LTS
 do_monitoring: true # Enable DigitalOcean monitoring/metrics
 

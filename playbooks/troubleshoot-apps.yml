@@ -1,0 +1,105 @@
+---
+# Troubleshooting and Docker Management Playbook
+# This playbook provides enhanced visibility and control over Docker builds
+
+- name: Application Troubleshooting and Docker Management
+  hosts: digitalocean
+  become: true
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/prod.yml
+
+  vars_prompt:
+    - name: target_app
+      prompt: "Which app to troubleshoot? (or 'all' for all apps)"
+      private: false
+      default: "all"
+
+    - name: action
+      prompt: "Action: [logs|rebuild|restart|status|cleanup]"
+      private: false
+      default: "status"
+
+    - name: force_rebuild
+      prompt: "Force complete rebuild? (y/n)"
+      private: false
+      default: "n"
+
+  pre_tasks:
+    - name: Ensure Docker is running
+      systemd:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Set action variables
+      set_fact:
+        force_rebuild_flag: "{{ force_rebuild | lower == 'y' }}"
+        selected_apps: "{{ [target_app] if target_app != 'all' else apps | map(attribute='name') | list }}"
+
+    - name: Display troubleshooting info
+      debug:
+        msg: |
+          🔧 Docker Troubleshooting Session
+          ================================
+          Target app(s): {{ selected_apps | join(', ') }}
+          Action: {{ action }}
+          Force rebuild: {{ force_rebuild_flag }}
+
+  tasks:
+    - name: Show application status
+      include_tasks: ../roles/deploy_apps/tasks/troubleshoot_single_app.yml
+      loop: "{{ apps }}"
+      loop_control:
+        loop_var: app
+      when: action == 'status' and (target_app == 'all' or app.name == target_app)
+
+    - name: Show application logs
+      include_tasks: ../roles/deploy_apps/tasks/show_logs.yml
+      loop: "{{ apps }}"
+      loop_control:
+        loop_var: app
+      when: action == 'logs' and (target_app == 'all' or app.name == target_app)
+
+    - name: Rebuild applications
+      include_tasks: ../roles/deploy_apps/tasks/rebuild_single_app.yml
+      loop: "{{ apps }}"
+      loop_control:
+        loop_var: app
+      vars:
+        force_rebuild: "{{ force_rebuild_flag }}"
+      when: action == 'rebuild' and (target_app == 'all' or app.name == target_app)
+
+    - name: Restart applications
+      include_tasks: ../roles/deploy_apps/tasks/restart_single_app.yml
+      loop: "{{ apps }}"
+      loop_control:
+        loop_var: app
+      when: action == 'restart' and (target_app == 'all' or app.name == target_app)
+
+    - name: Cleanup Docker resources
+      include_tasks: ../roles/deploy_apps/tasks/cleanup_docker.yml
+      when: action == 'cleanup'
+
+  post_tasks:
+    - name: Display summary
+      debug:
+        msg: |
+          🎉 Troubleshooting complete!
+
+          Useful commands for continued monitoring:
+
+          # SSH to server and check logs:
+          ssh {{ ansible_user }}@{{ ansible_host }}
+
+          # View real-time logs:
+          cd /opt/your-app && docker compose logs -f
+
+          # Check container status:
+          cd /opt/your-app && docker compose ps
+
+          # View deployment logs:
+          sudo cat /var/log/ansible-deployments/your-app_*.log
+
+          # Manual rebuild:
+          cd /opt/your-app && docker compose build --progress=plain --no-cache

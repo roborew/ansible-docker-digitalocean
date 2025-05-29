@@ -26,7 +26,8 @@ This Ansible project automates the provisioning and configuration of DigitalOcea
 
 - **macOS**: Homebrew (for Ansible installation)
 - **Ubuntu**: Python 3 and pip3 (for Ansible installation)
-\
+  \
+
 ## Quick Start
 
 ### **🚀 New User Setup**
@@ -248,6 +249,7 @@ Production settings are stored in an encrypted file:
 - **`playbooks/provision-droplet.yml`**: Creates DigitalOcean droplets only
 - **`playbooks/configure-server.yml`**: Configures servers with Docker, tmux, etc.
 - **`playbooks/deploy-stack.yml`**: Deploys Caddy proxy and applications
+- **`playbooks/troubleshoot-apps.yml`**: Docker troubleshooting & management
 - **`playbooks/destroy-droplet.yml`**: Safely destroys droplets
 
 ### Application Deployment System
@@ -561,8 +563,26 @@ The automated setup includes:
    - Check that the app repository has a docker-compose.yml
    - Verify Caddy labels are correctly formatted
    - Ensure the proxy network exists
+   - **For Docker build issues, see [Docker Build Visibility & Troubleshooting](#docker-build-visibility--troubleshooting)**
 
-8. **Inventory File Issues**:
+8. **Docker Build Issues**:
+
+   ```bash
+   # Quick troubleshooting
+   ansible-playbook playbooks/troubleshoot-apps.yml
+
+   # Check build logs
+   ssh user@your-server
+   cat /tmp/your-app_build.log
+
+   # Manual rebuild with full output
+   ./scripts/docker-debug.sh myapp rebuild
+
+   # System cleanup
+   ./scripts/docker-debug.sh cleanup
+   ```
+
+9. **Inventory File Issues**:
 
    ```bash
    # If inventory seems corrupted or outdated
@@ -592,6 +612,203 @@ ansible-playbook -vvv playbooks/provision-and-configure.yml
 ansible-playbook -vvv playbooks/deploy-stack.yml
 ```
 
+## Docker Build Visibility & Troubleshooting
+
+### Enhanced Build Output
+
+By default, Docker builds run quietly. For better visibility during builds and deployments:
+
+#### **🔍 Verbose Deployment Mode**
+
+```bash
+# Deploy with full Docker build output visible
+ansible-playbook playbooks/deploy-stack.yml -e verbose=true
+
+# Rebuild specific apps with full output
+ansible-playbook playbooks/troubleshoot-apps.yml
+```
+
+#### **🛠️ Interactive Troubleshooting**
+
+The troubleshooting playbook provides an interactive menu for Docker management:
+
+```bash
+ansible-playbook playbooks/troubleshoot-apps.yml
+```
+
+This will prompt you for:
+
+- **Target app**: Which app to troubleshoot (or 'all')
+- **Action**: logs, rebuild, restart, status, cleanup
+- **Force rebuild**: Complete rebuild with no cache
+
+#### **📊 Quick Docker Commands**
+
+For immediate troubleshooting, use the debug helper script:
+
+```bash
+# Quick status check
+./scripts/docker-debug.sh myapp status
+
+# View recent logs
+./scripts/docker-debug.sh myapp logs
+
+# Follow live logs (Ctrl+C to exit)
+./scripts/docker-debug.sh myapp live
+
+# Rebuild with full output
+./scripts/docker-debug.sh myapp rebuild
+
+# Get shell access to container
+./scripts/docker-debug.sh myapp shell
+
+# System-wide Docker cleanup
+./scripts/docker-debug.sh cleanup
+```
+
+### Build Failure Handling
+
+#### **🔍 Diagnosing Build Issues**
+
+When builds fail, logs are automatically saved:
+
+```bash
+# On your server, check build logs:
+ssh user@your-server
+cat /tmp/your-app_build.log
+cat /tmp/your-app_deploy.log
+
+# View deployment history:
+ls /var/log/ansible-deployments/your-app_*.log
+```
+
+#### **🔄 Recovery Options**
+
+**Option 1: Force Rebuild**
+
+```bash
+# Complete rebuild (clears cache, pulls latest code)
+ansible-playbook playbooks/troubleshoot-apps.yml
+# Select your app → rebuild → force rebuild: y
+```
+
+**Option 2: Manual Rebuild**
+
+```bash
+# SSH to server and rebuild manually
+ssh user@your-server
+cd /opt/your-app
+docker compose down
+docker compose build --progress=plain --no-cache
+docker compose up -d
+```
+
+**Option 3: Rollback to Previous Version**
+
+```bash
+# If you have a working version, restart without rebuilding
+ansible-playbook playbooks/troubleshoot-apps.yml
+# Select your app → restart
+```
+
+#### **🧹 Cleanup Failed Builds**
+
+When builds fail, they can leave behind partial images and containers:
+
+```bash
+# Clean up Docker resources
+ansible-playbook playbooks/troubleshoot-apps.yml
+# Select cleanup action
+
+# Or use the helper script
+./scripts/docker-debug.sh cleanup
+```
+
+### Common Build Issues & Solutions
+
+#### **1. Out of Disk Space**
+
+```bash
+# Check disk usage
+ssh user@your-server
+df -h
+docker system df
+
+# Clean up space
+docker system prune -af
+docker volume prune -f
+```
+
+#### **2. Network/Download Issues**
+
+```bash
+# Retry with fresh network connections
+cd /opt/your-app
+docker compose build --no-cache --pull
+```
+
+#### **3. Cache Issues**
+
+```bash
+# Force rebuild without cache
+docker compose build --no-cache
+docker builder prune -af
+```
+
+#### **4. Permission Issues**
+
+```bash
+# Check file ownership
+ls -la /opt/your-app
+sudo chown -R $(whoami):$(whoami) /opt/your-app
+```
+
+#### **5. Port Conflicts**
+
+```bash
+# Check what's using ports
+ss -tulpn | grep :3000
+docker ps
+
+# Stop conflicting containers
+docker stop $(docker ps -q)
+```
+
+### Log Monitoring
+
+#### **📋 Real-time Monitoring**
+
+```bash
+# Monitor all apps during deployment
+ansible-playbook playbooks/deploy-stack.yml -e verbose=true
+
+# Watch specific app logs live
+ssh user@your-server
+cd /opt/your-app && docker compose logs -f
+```
+
+#### **📄 Log Locations**
+
+```
+/tmp/[app-name]_build.log       # Latest build output
+/tmp/[app-name]_deploy.log      # Latest deployment output
+/tmp/[app-name]_rebuild.log     # Manual rebuild logs
+/var/log/ansible-deployments/  # Full deployment history
+```
+
+#### **🔍 Advanced Debugging**
+
+```bash
+# Inspect container details
+./scripts/docker-debug.sh myapp inspect
+
+# Check resource usage
+./scripts/docker-debug.sh myapp status
+
+# Get interactive shell in container
+./scripts/docker-debug.sh myapp shell
+```
+
 ## File Structure
 
 ```
@@ -613,17 +830,19 @@ robo-ansible/
 │   ├── provision-droplet.yml     # Droplet provisioning
 │   ├── configure-server.yml      # Server configuration
 │   ├── deploy-stack.yml          # Application deployment
+│   ├── troubleshoot-apps.yml     # Docker troubleshooting & management
 │   ├── destroy-droplet.yml       # Droplet destruction
 │   └── includes/
 │       └── validate_environment.yml # Shared validation tasks (auto-imported)
 ├── roles/
 │   ├── caddy_proxy/              # Caddy proxy setup
-│   └── deploy_apps/              # Application deployment
+│   └── deploy_apps/              # Application deployment & troubleshooting
 ├── scripts/
 │   ├── bootstrap.sh               # One-time setup (Ansible + project init)
 │   ├── encrypt-prod.sh            # Vault management
 │   ├── get-ssh-key-ids.sh         # SSH key lookup
-│   └── update-inventory.sh        # Inventory management
+│   ├── update-inventory.sh        # Inventory management
+│   └── docker-debug.sh            # Docker troubleshooting helper
 ├── templates/
 │   └── docker-compose.example.yml # App template
 ```

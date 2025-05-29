@@ -1,0 +1,46 @@
+---
+- name: "Set app variables for {{ app.name }}"
+  set_fact:
+    app_name: "{{ app.name }}"
+    app_dir: "{{ apps_base_dir }}/{{ app.name }}"
+
+- name: "Restart {{ app_name }}"
+  shell: |
+    echo "🔄 Restarting {{ app_name }}..."
+    {{ compose_command }} restart
+    echo "Restart completed with exit code: $?"
+  args:
+    chdir: "{{ app_dir }}"
+  become: true
+  become_user: "{{ apps_user }}"
+  register: restart_output
+
+- name: "Wait for {{ app_name }} to stabilize"
+  wait_for:
+    timeout: 15
+  delegate_to: localhost
+  become: false
+
+- name: "Check {{ app_name }} status after restart"
+  shell: |
+    echo "📊 Status after restart:"
+    {{ compose_command }} ps
+    echo ""
+    echo "Recent logs:"
+    {{ compose_command }} logs --tail=10
+  args:
+    chdir: "{{ app_dir }}"
+  become: true
+  become_user: "{{ apps_user }}"
+  register: status_check
+  changed_when: false
+
+- name: "Display restart result for {{ app_name }}"
+  debug:
+    msg: |
+      🔄 {{ app_name }} restart complete!
+
+      {{ restart_output.stdout }}
+
+      Current status:
+      {{ status_check.stdout }}

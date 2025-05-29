@@ -1,0 +1,62 @@
+---
+- name: "Set app variables for {{ app.name }}"
+  set_fact:
+    app_name: "{{ app.name }}"
+    app_dir: "{{ apps_base_dir }}/{{ app.name }}"
+
+- name: "Check if {{ app_name }} directory exists"
+  stat:
+    path: "{{ app_dir }}"
+  register: app_dir_stat
+
+- name: "Show {{ app_name }} logs"
+  shell: |
+    echo "📋 Logs for {{ app_name }}"
+    echo "========================="
+    echo ""
+
+    if [ -f "docker-compose.yml" ] || [ -f "compose.yml" ]; then
+      echo "🔥 Live Container Logs (last 50 lines):"
+      {{ compose_command }} logs --tail=50 --timestamps || echo "❌ No container logs available"
+      echo ""
+      
+      echo "🏗️  Build Log:"
+      if [ -f "/tmp/{{ app_name }}_build.log" ]; then
+        cat "/tmp/{{ app_name }}_build.log"
+      else
+        echo "❌ No build log found"
+      fi
+      echo ""
+      
+      echo "🚀 Deployment Log:"
+      if [ -f "/tmp/{{ app_name }}_deploy.log" ]; then
+        cat "/tmp/{{ app_name }}_deploy.log"
+      else
+        echo "❌ No deployment log found"
+      fi
+      echo ""
+      
+      echo "📄 Latest Full Deployment Log:"
+      LATEST_LOG=$(ls -t /var/log/ansible-deployments/{{ app_name }}_*.log 2>/dev/null | head -1)
+      if [ -n "$LATEST_LOG" ]; then
+        echo "File: $LATEST_LOG"
+        echo "---"
+        cat "$LATEST_LOG"
+      else
+        echo "❌ No deployment logs found"
+      fi
+    else
+      echo "❌ No docker-compose.yml or compose.yml found"
+    fi
+  args:
+    chdir: "{{ app_dir }}"
+  become: true
+  become_user: "{{ apps_user }}"
+  register: app_logs
+  when: app_dir_stat.stat.exists
+  changed_when: false
+
+- name: "Display {{ app_name }} logs"
+  debug:
+    msg: "{{ app_logs.stdout }}"
+  when: app_dir_stat.stat.exists and app_logs is defined

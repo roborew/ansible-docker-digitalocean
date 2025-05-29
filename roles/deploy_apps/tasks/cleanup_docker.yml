@@ -1,0 +1,99 @@
+---
+- name: "Display Docker cleanup warning"
+  debug:
+    msg: |
+      ⚠️  Docker Cleanup Operation
+      ============================
+      This will clean up:
+      - Unused containers
+      - Unused images  
+      - Unused networks
+      - Unused volumes (with confirmation)
+      - Build cache
+
+- name: "Show current Docker usage"
+  shell: |
+    echo "📊 Current Docker Resource Usage:"
+    echo "=================================="
+    echo ""
+    echo "🖼️  Images:"
+    docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}" | head -10
+    echo ""
+    echo "📦 Containers:"
+    docker ps -a --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
+    echo ""
+    echo "🌐 Networks:"
+    docker network ls
+    echo ""
+    echo "💾 Volumes:"
+    docker volume ls
+    echo ""
+    echo "💿 Disk Usage:"
+    docker system df
+  register: current_usage
+  changed_when: false
+
+- name: "Display current usage"
+  debug:
+    msg: "{{ current_usage.stdout }}"
+
+- name: "Clean up stopped containers"
+  shell: |
+    echo "🗑️  Cleaning up stopped containers..."
+    docker container prune -f
+    echo "Containers cleaned up"
+  register: container_cleanup
+
+- name: "Clean up unused images"
+  shell: |
+    echo "🗑️  Cleaning up unused images..."
+    docker image prune -f
+    echo "Images cleaned up"
+  register: image_cleanup
+
+- name: "Clean up unused networks"
+  shell: |
+    echo "🗑️  Cleaning up unused networks..."
+    docker network prune -f
+    echo "Networks cleaned up"
+  register: network_cleanup
+
+- name: "Clean up build cache"
+  shell: |
+    echo "🗑️  Cleaning up build cache..."
+    docker builder prune -f
+    echo "Build cache cleaned up"
+  register: buildcache_cleanup
+  ignore_errors: true
+
+- name: "Show cleanup results"
+  shell: |
+    echo "✅ Docker Cleanup Complete!"
+    echo "=========================="
+    echo ""
+    echo "📊 New Docker Resource Usage:"
+    docker system df
+    echo ""
+    echo "📈 Space Freed:"
+    echo "- Containers: cleaned"
+    echo "- Images: cleaned"  
+    echo "- Networks: cleaned"
+    echo "- Build cache: cleaned"
+  register: cleanup_results
+  changed_when: false
+
+- name: "Display cleanup summary"
+  debug:
+    msg: |
+      🎉 Docker cleanup complete!
+
+      {{ cleanup_results.stdout }}
+
+      Cleanup Details:
+      - {{ container_cleanup.stdout }}
+      - {{ image_cleanup.stdout }}
+      - {{ network_cleanup.stdout }}
+      - {{ buildcache_cleanup.stdout | default('Build cache cleanup skipped') }}
+
+      Note: Volumes were not cleaned automatically for safety.
+      To clean volumes manually: docker volume prune

@@ -1,0 +1,163 @@
+---
+- name: "Set app variables for {{ app.name }}"
+  set_fact:
+    app_name: "{{ app.name }}"
+    app_dir: "{{ apps_base_dir }}/{{ app.name }}"
+
+- name: "Check if {{ app_name }} directory exists"
+  stat:
+    path: "{{ app_dir }}"
+  register: app_dir_stat
+
+- name: "Skip {{ app_name }} if directory doesn't exist"
+  debug:
+    msg: "⚠️  {{ app_name }} directory not found at {{ app_dir }}"
+  when: not app_dir_stat.stat.exists
+
+- name: "Rebuild {{ app_name }} from scratch"
+  block:
+    - name: "Stop {{ app_name }} containers"
+      shell: |
+        echo "⏹️  Stopping {{ app_name }} containers..."
+        {{ compose_command }} down --remove-orphans
+      args:
+        chdir: "{{ app_dir }}"
+      become: true
+      become_user: "{{ apps_user }}"
+      ignore_errors: true
+
+    - name: "Remove {{ app_name }} images if force rebuild"
+      shell: |
+        echo "🗑️  Removing old images for {{ app_name }}..."
+        {{ compose_command }} down --rmi all --volumes --remove-orphans
+        docker image prune -af
+        docker container prune -f
+        docker volume prune -f
+      args:
+        chdir: "{{ app_dir }}"
+      become: true
+      become_user: "{{ apps_user }}"
+      when: force_rebuild | default(false)
+      ignore_errors: true
+
+    - name: "Pull latest code for {{ app_name }}"
+      shell: |
+        echo "📥 Pulling latest code for {{ app_name }}..."
+        git fetch --all
+        git reset --hard origin/{{ app.branch | default('main') }}
+        git clean -fdx
+      args:
+        chdir: "{{ app_dir }}"
+      become: true
+      become_user: "{{ apps_user }}"
+
+    - name: "Build {{ app_name }} with verbose output"
+      shell: |
+        echo "🏗️  Building {{ app_name }} with full visibility..."
+        DOCKER_BUILDKIT=1 {{ compose_command }} build \
+          --progress=plain \
+          {{ '--no-cache' if force_rebuild | default(false) else '' }} \
+          --pull \
+          2>&1 | tee /tmp/{{ app_name }}_rebuild.log
+        echo "Build completed with exit code: $?"
+      args:
+        chdir: "{{ app_dir }}"
+      become: true
+      become_user: "{{ apps_user }}"
+      environment:
+        CADDY_HOSTNAME: "{{ app.hostname | default(app.name + '.' + ansible_default_ipv4.address + '.nip.io') }}"
+        CADDY_PORT: "{{ app.port | default('3000') }}"
+        PROXY_NETWORK: "{{ proxy_network_name }}"
+      register: rebuild_result
+      failed_when: rebuild_result.rc != 0
+
+    - name: "Start {{ app_name }} after rebuild"
+      shell: |
+        echo "🚀 Starting {{ app_name }} after rebuild..."
+        {{ compose_command }} up -d 2>&1 | tee /tmp/{{ app_name }}_restart.log
+        echo "Start completed with exit code: $?"
+      args:
+        chdir: "{{ app_dir }}"
+      become: true
+      become_user: "{{ apps_user }}"
+      environment:
+        CADDY_HOSTNAME: "{{ app.hostname | default(app.name + '.' + ansible_default_ipv4.address + '.nip.io') }}"
+        CADDY_PORT: "{{ app.port | default('3000') }}"
+        PROXY_NETWORK: "{{ proxy_network_name }}"
+      register: restart_result
+
+    - name: "Wait for {{ app_name }} to stabilize"
+      wait_for:
+        timeout: 30
+      delegate_to: localhost
+      become: false
+
+    - name: "Verify {{ app_name }} rebuild success"
+      shell: |
+        echo "✅ Verifying {{ app_name }} rebuild..."
+        {{ compose_command }} ps
+        echo ""
+        echo "Recent logs:"
+        {{ compose_command }} logs --tail=20
+      args:
+        chdir: "{{ app_dir }}"
+      become: true
+      become_user: "{{ apps_user }}"
+      register: verify_result
+      changed_when: false
+
+    - name: "Save rebuild logs"
+      shell: |
+        mkdir -p /var/log/ansible-deployments
+        cat > /var/log/ansible-deployments/{{ app_name }}_rebuild_$(date +%Y%m%d_%H%M%S).log << EOF
+        Rebuild: {{ app_name }}
+        Timestamp: $(date)
+        Force rebuild: {{ force_rebuild | default(false) }}
+
+        Rebuild Output:
+        $(cat /tmp/{{ app_name }}_rebuild.log)
+
+        Restart Output:
+        $(cat /tmp/{{ app_name }}_restart.log)
+
+        Final Status:
+        $({{ compose_command }} ps)
+
+        Final Logs:
+        $({{ compose_command }} logs --tail=50)
+        EOF
+      args:
+        chdir: "{{ app_dir }}"
+      become: true
+
+    - name: "Display rebuild summary"
+      debug:
+        msg: |
+          🎉 {{ app_name }} rebuild complete!
+
+          Summary:
+          - Force rebuild: {{ force_rebuild | default(false) }}
+          - Build logs: /tmp/{{ app_name }}_rebuild.log
+          - Restart logs: /tmp/{{ app_name }}_restart.log
+          - Full rebuild log: /var/log/ansible-deployments/{{ app_name }}_rebuild_*.log
+
+          Status:
+          {{ verify_result.stdout }}
+
+  rescue:
+    - name: "Handle rebuild failure for {{ app_name }}"
+      debug:
+        msg: |
+          ❌ {{ app_name }} rebuild failed!
+
+          Troubleshooting steps:
+          1. Check build logs: cat /tmp/{{ app_name }}_rebuild.log
+          2. Check docker daemon: systemctl status docker
+          3. Check disk space: df -h
+          4. Manual rebuild: cd {{ app_dir }} && {{ compose_command }} build --progress=plain --no-cache
+
+          Rollback options:
+          - Restart old containers: cd {{ app_dir }} && {{ compose_command }} up -d
+          - Pull previous image: cd {{ app_dir }} && {{ compose_command }} pull && {{ compose_command }} up -d
+
+  when: app_dir_stat.stat.exists

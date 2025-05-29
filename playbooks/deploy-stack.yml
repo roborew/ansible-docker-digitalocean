@@ -16,8 +16,23 @@
   vars_files:
     - ../group_vars/all.yml
     - ../group_vars/prod.yml
+  vars:
+    # Enable verbose build output (set to true to see full Docker build logs)
+    verbose_builds: "{{ verbose | default(false) }}"
 
   pre_tasks:
+    - name: Display deployment mode
+      debug:
+        msg: |
+          🚀 Starting deployment...
+          Verbose builds: {{ verbose_builds }}
+
+          💡 For enhanced build visibility, run with:
+          ansible-playbook playbooks/deploy-stack.yml -e verbose=true
+
+          🔧 For troubleshooting, use:
+          ansible-playbook playbooks/troubleshoot-apps.yml
+
     - name: Ensure Docker is running
       systemd:
         name: docker

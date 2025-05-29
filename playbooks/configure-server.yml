@@ -7,7 +7,6 @@
   gather_facts: yes
 
   tasks:
-
     - name: Debug - Check root's authorized_keys content
       shell: "cat /root/.ssh/authorized_keys || echo 'File not found'"
       register: root_keys

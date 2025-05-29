@@ -1,0 +1,74 @@
+---
+- name: "Set app variables for {{ app.name }}"
+  set_fact:
+    app_name: "{{ app.name }}"
+    app_dir: "{{ apps_base_dir }}/{{ app.name }}"
+
+- name: "Check if {{ app_name }} directory exists"
+  stat:
+    path: "{{ app_dir }}"
+  register: app_dir_stat
+
+- name: "Skip {{ app_name }} if directory doesn't exist"
+  debug:
+    msg: "⚠️  {{ app_name }} directory not found at {{ app_dir }}"
+  when: not app_dir_stat.stat.exists
+
+- name: "Gather {{ app_name }} diagnostics"
+  shell: |
+    echo "🔍 Diagnostics for {{ app_name }}"
+    echo "=================================="
+    echo "📁 Directory: {{ app_dir }}"
+    echo "📅 Last modified: $(stat -c %y {{ app_dir }} 2>/dev/null || echo 'Unknown')"
+    echo ""
+
+    if [ -f "docker-compose.yml" ] || [ -f "compose.yml" ]; then
+      echo "📋 Container Status:"
+      {{ compose_command }} ps --format table || echo "❌ No containers found"
+      echo ""
+      
+      echo "🖼️  Images:"
+      {{ compose_command }} images || echo "❌ No images found"
+      echo ""
+      
+      echo "📊 Resource Usage:"
+      {{ compose_command }} top || echo "❌ No running containers"
+      echo ""
+      
+      echo "🌐 Networks:"
+      docker network ls | grep -E "(proxy|{{ app_name }})" || echo "❌ No app networks found"
+      echo ""
+      
+      echo "📦 Volumes:"
+      docker volume ls | grep "{{ app_name }}" || echo "❌ No app volumes found"
+      echo ""
+      
+      if [ -f "/tmp/{{ app_name }}_build.log" ]; then
+        echo "🏗️  Last Build Log (last 10 lines):"
+        tail -10 "/tmp/{{ app_name }}_build.log"
+        echo ""
+      fi
+      
+      if [ -f "/tmp/{{ app_name }}_deploy.log" ]; then
+        echo "🚀 Last Deploy Log (last 10 lines):"
+        tail -10 "/tmp/{{ app_name }}_deploy.log"
+        echo ""
+      fi
+      
+      echo "📄 Recent Deployment Logs:"
+      ls -la /var/log/ansible-deployments/{{ app_name }}_*.log 2>/dev/null | tail -3 || echo "❌ No deployment logs found"
+    else
+      echo "❌ No docker-compose.yml or compose.yml found"
+    fi
+  args:
+    chdir: "{{ app_dir }}"
+  become: true
+  become_user: "{{ apps_user }}"
+  register: diagnostics
+  when: app_dir_stat.stat.exists
+  changed_when: false
+
+- name: "Display {{ app_name }} diagnostics"
+  debug:
+    msg: "{{ diagnostics.stdout }}"
+  when: app_dir_stat.stat.exists and diagnostics is defined
