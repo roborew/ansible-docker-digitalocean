@@ -8,7 +8,6 @@
 .vault_password
 
 # Generated files
-droplet_ips.txt
 *.retry
 
 # Inventory backups

@@ -22,12 +22,12 @@ all:
 
     production:
       hosts:
-        # Add production hosts here or use separate inventory/production.yml
+        # Add production hosts here or use groups
       vars:
-        ansible_user: "{{ server_user | default('robodeploy') }}"
+        ansible_user: "{{ server_user }}"
 
     staging:
       hosts:
         # Add staging hosts here
       vars:
-        ansible_user: "{{ server_user | default('robodeploy') }}" 
+        ansible_user: "{{ server_user }}" 

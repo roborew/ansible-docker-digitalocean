@@ -9,18 +9,17 @@ all:
         # Example:
         # prod-web-01:
         #   ansible_host: 192.168.1.10
-        #   ansible_user: robodeploy
+        #   ansible_user: exampleUser  # Will be set from server_user in all.yml
         #   server_role: web
         #   environment: production
         #
         # prod-db-01:
         #   ansible_host: 192.168.1.20
-        #   ansible_user: robodeploy
+        #   ansible_user: exampleUser  # Will be set from server_user in all.yml
         #   server_role: database
         #   environment: production
 
       vars:
-        ansible_user: "{{ server_user | default('robodeploy') }}"
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
         ansible_python_interpreter: /usr/bin/python3
         environment: production
@@ -30,7 +29,6 @@ all:
         # Add your staging servers here
 
       vars:
-        ansible_user: "{{ server_user | default('robodeploy') }}"
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
         ansible_python_interpreter: /usr/bin/python3
         environment: staging

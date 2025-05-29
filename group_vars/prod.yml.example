@@ -24,7 +24,7 @@ apps:
   #   port: "80"
 
 # Caddy configuration for production
-caddy_email: "admin@example.com"
+caddy_email: "admin@example.com"  # Example value, should be set in .env
 
 # Production-specific overrides
 apps_base_dir: "/opt"

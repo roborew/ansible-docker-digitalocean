@@ -76,93 +76,9 @@ robo-ansible/
 1. **Test with example configurations**:
 
    ```bash
-   # Test playbook syntax
-   ansible-playbook --syntax-check playbooks/site.yml
+   # Check playbook syntax
+   ansible-playbook --syntax-check playbooks/provision-and-configure.yml
 
    # Test with example inventory
    ansible-inventory --list -i inventory/hosts.yml.example
    ```
-
-2. **Test scripts**:
-
-   ```bash
-   # Test initialization
-   ./scripts/init-project.sh
-
-   # Test environment setup (with .env configured)
-   source scripts/setup-env.sh
-   ```
-
-### Integration Testing
-
-- Test with a development DigitalOcean account
-- Use small droplet sizes for cost efficiency
-- Clean up test resources after testing
-
-## 📝 Pull Request Process
-
-1. **Update documentation** if you're adding features
-2. **Test your changes** thoroughly
-3. **Follow commit message conventions**:
-
-   ```
-   feat: add new deployment role
-   fix: resolve inventory update issue
-   docs: update README with new examples
-   ```
-
-4. **Submit pull request** with:
-   - Clear description of changes
-   - Testing steps performed
-   - Any breaking changes noted
-
-## 🔒 Security Considerations
-
-### For Public Repository
-
-- All example files should use placeholder values
-- No real infrastructure details in templates
-- Generic hostnames like `example.com`
-- Placeholder API tokens like `your_token_here`
-
-### For Private Forks
-
-- Use ansible-vault for sensitive data
-- Keep vault passwords secure
-- Use separate branches for different environments
-- Regular security audits of configurations
-
-## 🌟 Feature Ideas
-
-We welcome contributions in these areas:
-
-- **New Cloud Providers**: AWS, GCP, Azure support
-- **Additional Applications**: More example app configurations
-- **Monitoring**: Integration with monitoring solutions
-- **Backup**: Automated backup strategies
-- **CI/CD**: GitHub Actions workflows
-- **Documentation**: Tutorials and guides
-
-## 🐛 Bug Reports
-
-When reporting bugs, please include:
-
-- Operating system and version
-- Ansible version
-- Error messages and logs
-- Steps to reproduce
-- Expected vs actual behavior
-
-## 💬 Questions and Support
-
-- **Issues**: Use GitHub Issues for bugs and feature requests
-- **Discussions**: Use GitHub Discussions for questions
-- **Security**: Email security issues privately
-
-## 📄 License
-
-By contributing, you agree that your contributions will be licensed under the same license as the project (MIT License).
-
-## 🙏 Recognition
-
-Contributors will be recognized in the README.md file. Thank you for helping make this project better!

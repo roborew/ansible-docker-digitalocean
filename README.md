@@ -55,7 +55,7 @@ This Ansible project automates the provisioning and configuration of DigitalOcea
 
 4. **Deploy**:
    ```bash
-   ansible-playbook playbooks/site.yml              # Provision & configure
+   ansible-playbook playbooks/provision-and-configure.yml  # Provision & configure
    ansible-playbook playbooks/deploy-stack.yml      # Deploy applications
    ```
 
@@ -135,26 +135,27 @@ nano .env
 
 ```bash
 # DigitalOcean Configuration
-DO_API_TOKEN=your_digitalocean_api_token_here
+DO_API_TOKEN=do_example_token_123456789abcdef  # Replace with your actual token
 
 # SSH Key Names from DigitalOcean (comma-separated)
 # Use friendly names like they appear in your DO account
-DO_SSH_KEYS=mac-mini-pub-key,mac-book-pro-pub
+DO_SSH_KEYS=example-mac-key,example-laptop-key
 
 # Server Security
-ROOT_PASSWORD=your_secure_root_password
-SERVER_USERNAME=robodeploy
+ROOT_PASSWORD=example_secure_password_123  # Replace with your secure password
+SERVER_USERNAME=exampleUser  # Must match server_user in group_vars/all.yml
 
 # Optional: Caddy email for Let's Encrypt
-CADDY_EMAIL=admin@yourdomain.com
+CADDY_EMAIL=admin@example.com  # Replace with your actual email
 ```
 
-**Benefits of using .env**:
+**Important Security Notes**:
 
-- ✅ Keeps sensitive data out of git
-- ✅ Easy to manage different environments
-- ✅ Automatically loaded by setup script
-- ✅ Use friendly SSH key names instead of cryptic IDs
+- ✅ Never use default usernames or passwords
+- ✅ Always set unique, secure values for each environment
+- ✅ Keep sensitive data out of git
+- ✅ Use environment-specific configurations
+- ✅ Never hardcode credentials in scripts or templates
 
 ### SSH Key Name Lookup
 
@@ -165,10 +166,10 @@ Instead of hunting for SSH key ID numbers, you can use the friendly names from y
 ./scripts/get-ssh-key-ids.sh
 
 # Look up specific keys by name
-./scripts/get-ssh-key-ids.sh "mac-mini-pub-key,mac-book-pro-pub"
+./scripts/get-ssh-key-ids.sh "example-mac-key,example-laptop-key"
 
 # Partial matching works too
-./scripts/get-ssh-key-ids.sh "mini,book"
+./scripts/get-ssh-key-ids.sh "mac,laptop"
 ```
 
 The script will show you the exact line to add to your `.env` file.
@@ -193,7 +194,7 @@ Production settings are stored in an encrypted file:
 
 ### Main Playbooks
 
-- **`playbooks/site.yml`**: Complete server provisioning and configuration
+- **`playbooks/provision-and-configure.yml`**: Main playbook that provisions and configures droplets in one go
 - **`playbooks/provision-droplet.yml`**: Creates DigitalOcean droplets only
 - **`playbooks/configure-server.yml`**: Configures servers with Docker, tmux, etc.
 - **`playbooks/deploy-stack.yml`**: Deploys Caddy proxy and applications
@@ -280,20 +281,82 @@ Each application repository must include a `docker-compose.yml` file with:
 
 See `templates/docker-compose.example.yml` for a complete example.
 
+### Inventory Management
+
+The inventory system is designed to be secure and maintainable:
+
+1. **Automatic Updates**: When you create new droplets using `provision-droplet.yml`, they are automatically added to `inventory/hosts.yml`
+2. **Encrypted Storage**: The inventory file is automatically encrypted with ansible-vault for security
+3. **Server User**: Uses the `server_user` from `group_vars/all.yml` instead of root
+4. **Manual Management**: You can manually add other servers to the inventory if needed
+5. **Group Organization**: Servers are organized into groups:
+   - `digitalocean`: Automatically managed droplets
+   - `production`: Manually added production servers
+   - `staging`: Manually added staging servers
+
+To manually add a server to the inventory:
+
+```bash
+# Decrypt the inventory
+ansible-vault decrypt inventory/hosts.yml
+
+# Edit the inventory
+nano inventory/hosts.yml
+
+# Re-encrypt the inventory
+ansible-vault encrypt inventory/hosts.yml
+```
+
+Example inventory structure:
+
+```yaml
+all:
+  children:
+    digitalocean:
+      hosts:
+        # Auto-managed droplets appear here
+        my-droplet:
+          ansible_host: 1.2.3.4
+          ansible_user: exampleUser # Will be set from server_user in all.yml
+          droplet_id: 123456789
+          droplet_region: nyc1
+          droplet_size: s-1vcpu-1gb
+          droplet_status: active
+    production:
+      hosts:
+        my-production-server:
+          ansible_host: 192.168.1.10
+          ansible_user: exampleUser # Will be set from server_user in all.yml
+    staging:
+      hosts:
+        my-staging-server:
+          ansible_host: 192.168.1.20
+          ansible_user: exampleUser # Will be set from server_user in all.yml
+```
+
 ### Traditional Usage Examples
 
 ```bash
 # Provision and configure new droplets
-ansible-playbook playbooks/site.yml
+ansible-playbook playbooks/provision-and-configure.yml --ask-vault-pass
 
 # Only provision droplets
 ansible-playbook playbooks/provision-droplet.yml
 
 # Only configure existing droplets
-ansible-playbook playbooks/configure-server.yml
+ansible-playbook playbooks/configure-server.yml --ask-vault-pass
+
+# Deploy applications
+ansible-playbook playbooks/deploy-stack.yml --ask-vault-pass
 
 # Destroy droplets
-ansible-playbook playbooks/destroy-droplet.yml
+ansible-playbook playbooks/destroy-droplet.yml --ask-vault-pass
+
+# View inventory
+ansible-vault view inventory/hosts.yml
+
+# Edit inventory
+ansible-vault edit inventory/hosts.yml
 ```
 
 ## SSH Key Management
@@ -347,7 +410,7 @@ The automated setup includes:
    - Installs Docker CE and Docker Compose plugin
    - Starts and enables Docker service
 3. **User Setup**:
-   - Creates non-root user (robodeploy by default)
+   - Creates non-root user (configured in group_vars/all.yml)
    - Adds user to docker group
    - Sets up SSH key access
 4. **Firewall Configuration**:
@@ -415,7 +478,7 @@ The automated setup includes:
 Run playbooks with verbose output:
 
 ```bash
-ansible-playbook -vvv playbooks/site.yml
+ansible-playbook -vvv playbooks/provision-and-configure.yml
 ansible-playbook -vvv playbooks/deploy-stack.yml --ask-vault-pass
 ```
 
@@ -433,7 +496,7 @@ robo-ansible/
 ├── inventory/
 │   └── hosts.yml                 # Inventory configuration
 ├── playbooks/
-│   ├── site.yml                  # Complete server setup
+│   ├── provision-and-configure.yml # Complete server setup
 │   ├── provision-droplet.yml     # Droplet provisioning
 │   ├── configure-server.yml      # Server configuration
 │   ├── deploy-stack.yml          # Application deployment

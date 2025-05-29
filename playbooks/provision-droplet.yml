@@ -85,25 +85,17 @@
         groups: digitalocean
       loop: "{{ droplet_result.results }}"
       when: item.changed and item.data is defined
-
-    - name: Save droplet IPs to file
-      copy:
-        content: |
-          # Generated droplet IPs - {{ ansible_date_time.iso8601 }}
-          {% for result in droplet_result.results %}
-          {% if result.changed and result.data is defined %}
-          {{ result.data.droplet.name }}: {{ result.data.droplet.networks.v4[0].ip_address }}
-          {% endif %}
-          {% endfor %}
-        dest: "./droplet_ips.txt"
-      when: droplet_result.results | selectattr('changed') | selectattr('data', 'defined') | list | length > 0
+      register: added_hosts
 
     - name: Update Ansible inventory with new droplets
-      shell: "{{ playbook_dir }}/../scripts/update-inventory.sh"
+      shell: "{{ playbook_dir }}/../scripts/update-inventory.sh --only-new"
       environment:
         DO_API_TOKEN: "{{ do_token }}"
-      when: droplet_result.results | selectattr('changed') | selectattr('data', 'defined') | list | length > 0
+      when: added_hosts is defined and added_hosts.results | selectattr('changed') | list | length > 0
       delegate_to: localhost
+      args:
+        chdir: "{{ playbook_dir }}/.."
+      register: inventory_update
 
     - name: Display next steps
       debug:
@@ -118,7 +110,7 @@
           {% endfor %}
 
           Next Steps:
-          1. Configure servers: ansible-playbook playbooks/configure-server.yml
+          1. Configure servers: ansible-playbook playbooks/configure-server.yml --ask-vault-pass
           2. Deploy applications: ansible-playbook playbooks/deploy-stack.yml --ask-vault-pass
-          3. Check inventory: cat inventory/hosts.yml
+          3. Check inventory: ansible-vault view inventory/hosts.yml
       when: droplet_result.results | selectattr('changed') | selectattr('data', 'defined') | list | length > 0

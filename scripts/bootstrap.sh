@@ -128,20 +128,32 @@ install_ansible_collections() {
 check_ssh_config() {
     echo -e "\n${BLUE}🔑 Checking SSH configuration...${NC}"
     
+    # Check for 1Password integration
+    local onepassword_detected=false
+    
     # Check for 1Password CLI
     if command -v op &> /dev/null; then
         echo -e "${GREEN}✅ 1Password CLI detected${NC}"
-        
-        # Check if SSH agent is configured for 1Password
-        if grep -q "IdentityAgent.*1Password" ~/.ssh/config 2>/dev/null; then
-            echo -e "${GREEN}✅ 1Password SSH agent appears to be configured${NC}"
-        else
-            echo -e "${YELLOW}💡 To use 1Password SSH agent, add to ~/.ssh/config:${NC}"
-            echo "   Host *.digitalocean.com"
-            echo "     IdentityAgent \"~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock\""
-        fi
-    else
-        echo -e "${YELLOW}⚠️  1Password CLI not detected${NC}"
+        onepassword_detected=true
+    fi
+    
+    # Check for 1Password SSH agent configuration
+    if grep -qi "1password" ~/.ssh/config 2>/dev/null; then
+        echo -e "${GREEN}✅ 1Password SSH agent configured${NC}"
+        onepassword_detected=true
+    fi
+    
+    # Check if 1Password app is running (macOS)
+    if [[ "$OSTYPE" == "darwin"* ]] && pgrep -f "1Password" >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ 1Password app running${NC}"
+        onepassword_detected=true
+    fi
+    
+    if [[ "$onepassword_detected" = false ]]; then
+        echo -e "${YELLOW}⚠️  1Password not detected${NC}"
+        echo -e "${YELLOW}💡 To use 1Password SSH agent, add to ~/.ssh/config:${NC}"
+        echo "   Host *.digitalocean.com"
+        echo "     IdentityAgent \"~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock\""
     fi
     
     # Check for existing SSH keys
@@ -260,15 +272,14 @@ show_next_steps() {
     echo -e "${YELLOW}3. Encrypt production configuration:${NC}"
     echo "   ./scripts/encrypt-prod.sh encrypt"
     echo ""
-    echo -e "${YELLOW}4. Load environment and deploy:${NC}"
-    echo "   source scripts/setup-env.sh"
-    echo "   ansible-playbook playbooks/site.yml"
+    echo -e "${YELLOW}4. Prepare environment and deploy:${NC}"
+    echo "   source scripts/prepare.sh"
+    echo "   ansible-playbook playbooks/provision-and-configure.yml"
     echo ""
     echo -e "${BOLD}💡 Important Notes:${NC}"
-    echo "• Always run 'source scripts/setup-env.sh' before using ansible"
+    echo "• Always run 'source scripts/prepare.sh' before deployment"
     echo "• Keep your vault password secure"
     echo "• Never commit .env or unencrypted prod.yml to version control"
-    echo ""
     
     if [[ "$SSH_KEY_FOUND" = true ]]; then
         echo -e "${YELLOW}🔑 Don't forget to add your SSH public key to DigitalOcean:${NC}"

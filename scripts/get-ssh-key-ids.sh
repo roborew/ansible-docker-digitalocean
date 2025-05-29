@@ -110,9 +110,9 @@ main() {
         display_all_keys "$temp_file"
         echo ""
         echo -e "${YELLOW}💡 Usage examples:${NC}"
-        echo "  $0 'mac-mini-pub-key,mac-book-pro-pub'"
-        echo "  $0 'mac-mini,mac-book'"
-        echo "  $0 'Mini Pub Key'"
+        echo "  $0 'example-mac-key,example-laptop-key'"
+        echo "  $0 'example-mac,example-laptop'"
+        echo "  $0 'Example Key'"
     else
         # Arguments provided - lookup specific keys
         lookup_key_ids "$1" "$temp_file"

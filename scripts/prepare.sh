@@ -106,6 +106,31 @@ check_ansible() {
 check_ssh() {
     echo -e "\n${BLUE}🔑 Checking SSH configuration...${NC}"
     
+    # Check for 1Password integration
+    local onepassword_detected=false
+    
+    # Check for 1Password CLI
+    if command -v op &> /dev/null; then
+        echo -e "${GREEN}✅ 1Password CLI detected${NC}"
+        onepassword_detected=true
+    fi
+    
+    # Check for 1Password SSH agent configuration
+    if grep -qi "1password" ~/.ssh/config 2>/dev/null; then
+        echo -e "${GREEN}✅ 1Password SSH agent configured${NC}"
+        onepassword_detected=true
+    fi
+    
+    # Check if 1Password app is running (macOS)
+    if [[ "$OSTYPE" == "darwin"* ]] && pgrep -f "1Password.*SSH" >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ 1Password SSH agent running${NC}"
+        onepassword_detected=true
+    fi
+    
+    if [[ "$onepassword_detected" = false ]]; then
+        echo -e "${YELLOW}⚠️  1Password not detected${NC}"
+    fi
+    
     # Check if SSH agent has keys
     if ssh-add -l &>/dev/null; then
         echo -e "${GREEN}✅ SSH agent has keys loaded${NC}"
@@ -170,7 +195,7 @@ main() {
     echo -e "${BOLD}${GREEN}🎉 Environment Ready!${NC}"
     echo ""
     echo -e "${YELLOW}You can now run:${NC}"
-    echo "  ansible-playbook playbooks/site.yml              # Provision & configure"
+    echo "  ansible-playbook playbooks/provision-and-configure.yml  # Provision & configure"
     echo "  ansible-playbook playbooks/deploy-stack.yml      # Deploy applications"
     echo ""
     echo -e "${BLUE}💡 Environment variables are loaded in this shell session${NC}"
