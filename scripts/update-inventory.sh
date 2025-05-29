@@ -12,7 +12,8 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 INVENTORY_FILE="inventory/hosts.yml"
-BACKUP_FILE="inventory/hosts.yml.backup.$(date +%Y%m%d_%H%M%S)"
+BACKUP_DIR="inventory/backup"
+BACKUP_FILE="${BACKUP_DIR}/hosts.yml.backup.$(date +%Y%m%d_%H%M%S)"
 ONLY_NEW=false
 ENCRYPT=true
 
@@ -44,8 +45,9 @@ if [ -z "$DO_API_TOKEN" ]; then
     exit 1
 fi
 
-# Ensure inventory directory exists
+# Ensure inventory and backup directories exist
 mkdir -p "inventory"
+mkdir -p "$BACKUP_DIR"
 
 # Create inventory file from template if it doesn't exist
 if [ ! -f "$INVENTORY_FILE" ] && [ -f "inventory/hosts.yml.example" ]; then
@@ -57,6 +59,10 @@ fi
 if [ -f "$INVENTORY_FILE" ]; then
     cp "$INVENTORY_FILE" "$BACKUP_FILE"
     echo -e "${YELLOW}📄 Backed up inventory to: $BACKUP_FILE${NC}"
+    
+    # Clean up old backups (keep last 5)
+    ls -t "$BACKUP_DIR"/hosts.yml.backup.* 2>/dev/null | tail -n +6 | xargs -r rm
+    echo -e "${BLUE}🧹 Kept last 5 backups in $BACKUP_DIR${NC}"
 fi
 
 # Get server username from all.yml
