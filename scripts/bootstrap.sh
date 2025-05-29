@@ -256,31 +256,45 @@ make_scripts_executable() {
 # Function to display next steps
 show_next_steps() {
     echo ""
+    echo -e "${GREEN}4. Vault Password Setup:${NC}"
+    echo ""
+    echo -e "${YELLOW}This project uses encrypted files for security. You need to set up a vault password file.${NC}"
+    echo ""
+    read -p "Enter your vault password (will be saved to .vault_pass): " -s vault_password
+    echo ""
+
+    if [ -n "$vault_password" ]; then
+        echo "$vault_password" > .vault_pass
+        chmod 600 .vault_pass
+        echo -e "${GREEN}✅ Vault password file created (.vault_pass)${NC}"
+        echo -e "${BLUE}💡 This file is already in .gitignore for security${NC}"
+    else
+        echo -e "${YELLOW}⚠️  No password entered. You'll need to create .vault_pass manually${NC}"
+        echo "   Run: echo 'your-password' > .vault_pass && chmod 600 .vault_pass"
+    fi
+    echo ""
+
     echo -e "${BOLD}${GREEN}🎉 Bootstrap Complete!${NC}"
     echo "======================="
     echo ""
-    echo -e "${BOLD}📝 Next Steps:${NC}"
+    echo -e "${BLUE}✨ Next Steps:${NC}"
     echo ""
-    echo -e "${YELLOW}1. Configure your environment:${NC}"
-    echo "   nano .env"
-    echo "   # Add your DigitalOcean API token and SSH key names"
+    echo "1. Edit your configuration:"
+    echo "   nano .env                    # Add DigitalOcean API token & SSH keys"
+    echo "   nano group_vars/prod.yml     # Add your applications"
     echo ""
-    echo -e "${YELLOW}2. Configure your applications:${NC}"
-    echo "   nano group_vars/prod.yml"
-    echo "   # Add your apps to deploy"
-    echo ""
-    echo -e "${YELLOW}3. Encrypt production configuration:${NC}"
-    echo "   ./scripts/encrypt-prod.sh encrypt"
-    echo ""
-    echo -e "${YELLOW}4. Prepare environment and deploy:${NC}"
-    echo "   source scripts/prepare.sh"
+    echo "2. Deploy your infrastructure:"
     echo "   ansible-playbook playbooks/provision-and-configure.yml"
+    echo "   ansible-playbook playbooks/deploy-stack.yml"
+    echo ""
+    echo -e "${GREEN}🎉 Setup complete! All validation and encryption happens automatically in playbooks.${NC}"
     echo ""
     echo -e "${BOLD}💡 Important Notes:${NC}"
-    echo "• Always run 'source scripts/prepare.sh' before deployment"
-    echo "• Keep your vault password secure"
-    echo "• Never commit .env or unencrypted prod.yml to version control"
-    
+    echo "• Keep your vault password secure (.vault_pass file)"
+    echo "• Never commit .env or .vault_pass to version control"
+    echo "• Both .env and .vault_pass are already in .gitignore"
+    echo ""
+
     if [[ "$SSH_KEY_FOUND" = true ]]; then
         echo -e "${YELLOW}🔑 Don't forget to add your SSH public key to DigitalOcean:${NC}"
         echo "https://cloud.digitalocean.com/account/security"

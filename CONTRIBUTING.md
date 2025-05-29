@@ -14,10 +14,10 @@ Thank you for your interest in contributing! This project provides a complete in
    cd robo-ansible
    ```
 
-3. **Initialize for testing** (optional):
+3. **Bootstrap the project**:
 
    ```bash
-   ./scripts/init-project.sh
+   ./scripts/bootstrap.sh
    ```
 
 4. **Create a feature branch**:
@@ -29,10 +29,34 @@ Thank you for your interest in contributing! This project provides a complete in
 
 ### Code Standards
 
-- **Shell Scripts**: Use `#!/bin/bash` and `set -e`
-- **Ansible**: Follow Ansible best practices and use YAML formatting
-- **Documentation**: Update README.md for any new features
-- **Security**: Never commit real credentials or sensitive data
+- **Shell Scripts**:
+
+  - Use `#!/bin/bash` and `set -e`
+  - Include color-coded output for better UX
+  - Add clear error messages and status indicators
+  - Use consistent backup management
+  - Never hardcode credentials or environment-specific values
+
+- **Ansible**:
+
+  - Follow Ansible best practices
+  - Use YAML formatting
+  - Encrypt sensitive data with ansible-vault
+  - Use variables from group_vars/all.yml for consistency
+
+- **Documentation**:
+
+  - Update README.md for any new features
+  - Include clear examples using generic values
+  - Document security considerations
+  - Keep CONTRIBUTING.md up to date
+
+- **Security**:
+  - Never commit real credentials or sensitive data
+  - Use example values in templates (e.g., exampleUser, example.com)
+  - Encrypt all production configurations
+  - Maintain proper backup rotation
+  - Validate environment variables
 
 ### File Structure
 
@@ -44,12 +68,24 @@ robo-ansible/
 │   └── prod.yml.example     # Template for production config
 ├── inventory/
 │   ├── hosts.yml.example    # Template for inventory
-│   └── production.yml       # Template for production hosts
+│   ├── production.yml       # Template for production hosts
+│   └── backups/             # Inventory backup directory
 ├── roles/                   # Ansible roles
 ├── playbooks/              # Ansible playbooks
 ├── scripts/                # Helper scripts
 └── templates/              # Application templates
 ```
+
+### Script Overview
+
+| Script                | Purpose                      | Security Notes                        |
+| --------------------- | ---------------------------- | ------------------------------------- |
+| `bootstrap.sh`        | Initial project setup        | No hardcoded values                   |
+| `update-inventory.sh` | Manages droplet inventory    | Encrypts inventory, maintains backups |
+| `get-ssh-key-ids.sh`  | SSH key management           | Uses example values in docs           |
+| `encrypt-prod.sh`     | Production config encryption | Manages vault operations              |
+
+**Note**: Environment validation is now built into all playbooks automatically.
 
 ### What to Include
 
@@ -57,9 +93,11 @@ robo-ansible/
 
 - Template files (`.example` suffix)
 - Generic configurations
-- Documentation
+- Documentation with example values
 - Scripts and playbooks
 - Role definitions
+- Backup management code
+- Example inventory files
 
 ❌ **Never commit:**
 
@@ -68,6 +106,16 @@ robo-ansible/
 - SSH keys or certificates
 - Real IP addresses or hostnames
 - API tokens or passwords
+- Hardcoded usernames or credentials
+- Real backup files
+
+### Backup Management
+
+- Backups are stored in `inventory/backups/`
+- Maintains last 5 backups by default
+- Uses timestamp format: `hosts.yml.backup.YYYYMMDD_HHMMSS`
+- Automatically rotates old backups
+- Never commit backup files to repository
 
 ## 🧪 Testing
 
@@ -81,4 +129,47 @@ robo-ansible/
 
    # Test with example inventory
    ansible-inventory --list -i inventory/hosts.yml.example
+
+   # Verify backup management
+   ./scripts/update-inventory.sh --no-encrypt
+   ls -l inventory/backups/
    ```
+
+2. **Security Testing**:
+
+   ```bash
+   # Verify no hardcoded credentials
+   grep -r "exampleUser\|example.com" --include="*.sh" --include="*.yml" .
+
+   # Check for proper encryption
+   ansible-vault view inventory/hosts.yml
+
+   # Test built-in validation (runs automatically in playbooks)
+   ansible-playbook --check playbooks/provision-and-configure.yml
+   ```
+
+### Pull Request Guidelines
+
+1. **Before submitting**:
+
+   - Run all tests
+   - Update documentation
+   - Check for hardcoded values
+   - Verify backup functionality
+   - Ensure proper encryption
+
+2. **In your PR**:
+
+   - Describe the changes
+   - Reference any issues
+   - Include testing steps
+   - Note security implications
+   - Update relevant documentation
+
+3. **Security checklist**:
+   - [ ] No hardcoded credentials
+   - [ ] Proper use of example values
+   - [ ] Encryption for sensitive data
+   - [ ] Backup management included
+   - [ ] Environment variable validation
+   - [ ] Updated documentation

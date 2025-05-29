@@ -12,7 +12,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 INVENTORY_FILE="inventory/hosts.yml"
-BACKUP_DIR="inventory/backup"
+BACKUP_DIR="inventory/backups"
 BACKUP_FILE="${BACKUP_DIR}/hosts.yml.backup.$(date +%Y%m%d_%H%M%S)"
 ONLY_NEW=false
 ENCRYPT=true
@@ -41,7 +41,7 @@ echo "=================================="
 # Check if DO_API_TOKEN is set
 if [ -z "$DO_API_TOKEN" ]; then
     echo -e "${RED}Error: DO_API_TOKEN not set${NC}"
-    echo "Run: source scripts/prepare.sh"
+    echo "Please set DO_API_TOKEN in your .env file"
     exit 1
 fi
 
@@ -70,10 +70,22 @@ if [ -f "group_vars/all.yml" ]; then
     # Extract ONLY the server_user value, being very specific about the pattern
     SERVER_USER=$(grep -E '^[[:space:]]*server_user:[[:space:]]*["]?[^"]*["]?$' group_vars/all.yml | sed -E 's/^[[:space:]]*server_user:[[:space:]]*["]?([^"]*)["]?$/\1/')
     
-    # Clean up any whitespace and Ansible variables
-    SERVER_USER=$(echo "$SERVER_USER" | sed 's/{{.*}}//g' | xargs)
+    # Clean up any whitespace and check if it's a template
+    SERVER_USER=$(echo "$SERVER_USER" | xargs)
     
-    if [ -z "$SERVER_USER" ] || [ "$SERVER_USER" = "None" ]; then
+    # If it's an Ansible template (contains lookup), get from environment instead
+    if [[ "$SERVER_USER" == *"lookup("* ]] || [[ "$SERVER_USER" == *"{{"* ]]; then
+        if [ -n "$SERVER_USERNAME" ]; then
+            SERVER_USER="$SERVER_USERNAME"
+            echo -e "${GREEN}✅ Using server user from environment: $SERVER_USER${NC}"
+        else
+            echo -e "${RED}❌ Error: server_user is templated but SERVER_USERNAME environment variable not set${NC}"
+            echo "Error: SERVER_USERNAME not found in server_user variable"
+            echo "This might be because the inventory template contains {{ lookup('env', 'SERVER_USERNAME') }}"
+            echo "Please check your .env file has SERVER_USERNAME set"
+            exit 1
+        fi
+    elif [ -z "$SERVER_USER" ] || [ "$SERVER_USER" = "None" ]; then
         echo -e "${RED}❌ Error: server_user not found in group_vars/all.yml${NC}"
         echo "Please ensure server_user is properly configured in group_vars/all.yml"
         exit 1
@@ -133,14 +145,16 @@ if [ "$ONLY_NEW" = true ]; then
     fi
 
     # Use a simpler Python script that doesn't require yaml
-    echo "$DROPLETS" | python3 -c "
+    echo "$DROPLETS" | ONLY_NEW=$ONLY_NEW python3 -c "
 import json
 import sys
+import os
 from datetime import datetime
 
 try:
     data = json.load(sys.stdin)
     droplets = data.get('droplets', [])
+    only_new = os.environ.get('ONLY_NEW', 'false') == 'true'
     
     if not droplets:
         print('        # No droplets found')
@@ -162,7 +176,11 @@ try:
             if public_ip:
                 print(f'        {name}:')
                 print(f'          ansible_host: {public_ip}')
-                print(f'          ansible_user: \"$SERVER_USER\"')
+                # New droplets start with root access, use root for --only-new
+                if only_new:
+                    print(f'          ansible_user: root')
+                else:
+                    print(f'          ansible_user: \"$SERVER_USER\"')
                 print(f'          droplet_id: {droplet[\"id\"]}')
                 print(f'          droplet_region: {droplet[\"region\"][\"slug\"]}')
                 print(f'          droplet_size: {droplet[\"size_slug\"]}')

@@ -110,7 +110,7 @@
           {% endfor %}
 
           Next Steps:
-          1. Configure servers: ansible-playbook playbooks/configure-server.yml --ask-vault-pass
-          2. Deploy applications: ansible-playbook playbooks/deploy-stack.yml --ask-vault-pass
+          1. Configure servers: ansible-playbook playbooks/configure-server.yml
+          2. Deploy applications: ansible-playbook playbooks/deploy-stack.yml
           3. Check inventory: ansible-vault view inventory/hosts.yml
       when: droplet_result.results | selectattr('changed') | selectattr('data', 'defined') | list | length > 0

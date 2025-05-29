@@ -1,4 +1,13 @@
 ---
 # Main playbook that provisions and configures DigitalOcean droplets
+- name: Environment Validation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    # Environment validation and preparation (runs once for entire workflow)
+    - import_tasks: includes/validate_environment.yml
+
 - import_playbook: provision-droplet.yml
 - import_playbook: configure-server.yml

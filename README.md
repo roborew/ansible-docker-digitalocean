@@ -26,7 +26,7 @@ This Ansible project automates the provisioning and configuration of DigitalOcea
 
 - **macOS**: Homebrew (for Ansible installation)
 - **Ubuntu**: Python 3 and pip3 (for Ansible installation)
-
+\
 ## Quick Start
 
 ### **🚀 New User Setup**
@@ -34,7 +34,7 @@ This Ansible project automates the provisioning and configuration of DigitalOcea
 1. **Bootstrap** (one-time setup):
 
    ```bash
-   git clone <this-repo>
+   git clone https://github.com/roborew/robo-ansible.git
    cd robo-ansible
    ./scripts/bootstrap.sh
    ```
@@ -44,35 +44,85 @@ This Ansible project automates the provisioning and configuration of DigitalOcea
    ```bash
    nano .env                    # Add DigitalOcean API token & SSH keys
    nano group_vars/prod.yml     # Add your applications
-   ./scripts/encrypt-prod.sh encrypt  # Encrypt production config
    ```
 
-3. **Prepare** (load environment & validate):
-
+3. **Deploy** (with automatic validation & encryption):
    ```bash
-   source scripts/prepare.sh
-   ```
-
-4. **Deploy**:
-   ```bash
-   ansible-playbook playbooks/provision-and-configure.yml  # Provision & configure
-   ansible-playbook playbooks/deploy-stack.yml      # Deploy applications
+   ansible-playbook playbooks/provision-and-configure.yml
+   ansible-playbook playbooks/deploy-stack.yml
    ```
 
 ### **🔄 Returning User Workflow**
 
 ```bash
-source scripts/prepare.sh                          # Load environment & validate
-ansible-playbook playbooks/deploy-stack.yml        # Deploy applications
+ansible-playbook playbooks/deploy-stack.yml
 ```
+
+**✨ All playbooks now include automatic pre-deployment validation:**
+
+- Environment variables are loaded from `.env` file
+- Configuration files are validated and encrypted automatically
+- SSH keys and DigitalOcean API are tested before deployment
+- System readiness is verified before any deployment tasks run
+
+### **🔑 Vault Password Management**
+
+Since both `group_vars/prod.yml` and `inventory/hosts.yml` are encrypted, this project uses a vault password file for seamless automation.
+
+**Initial Setup (Handled by Bootstrap)**
+The `bootstrap.sh` script automatically prompts you to create the vault password file during initial setup. If you need to create or update it manually:
+
+```bash
+# Create vault password file (keep this secure!)
+echo "your-vault-password" > .vault_pass
+chmod 600 .vault_pass
+
+# The ansible.cfg is already configured to use this file
+# vault_password_file = .vault_pass
+```
+
+**Benefits**:
+
+- ✅ No need to type password multiple times
+- ✅ Seamless access to both encrypted files
+- ✅ Fully automated deployments
+- ✅ No `--ask-vault-pass` flags needed
+
+**Alternative: Manual Password Entry**
+
+```bash
+# If you prefer not to use a password file, comment out the line in ansible.cfg:
+# vault_password_file = .vault_pass
+
+# Then use --ask-vault-pass with commands:
+ansible-playbook playbooks/deploy-stack.yml --ask-vault-pass
+```
+
+**⚠️ Security Note**: Never commit `.vault_pass` to git. It's already in `.gitignore`.
 
 ### **🛠️ Script Overview**
 
-| Script            | Purpose                                                   | When to Use           |
-| ----------------- | --------------------------------------------------------- | --------------------- |
-| `bootstrap.sh`    | Install Ansible, collections, initialize project files    | **Once** (first time) |
-| `prepare.sh`      | Load environment variables + validate everything is ready | **Every deployment**  |
-| `encrypt-prod.sh` | Manage vault encryption for production config             | When editing prod.yml |
+| Script            | Purpose                                                             | When to Use                 |
+| ----------------- | ------------------------------------------------------------------- | --------------------------- |
+| `bootstrap.sh`    | Install Ansible, collections, initialize project files              | **Once** (first time)       |
+| `encrypt-prod.sh` | Manual vault encryption (auto-encryption also built into playbooks) | **Manual vault operations** |
+
+**🎯 Pure Ansible Workflow:**
+
+```bash
+# All validation and encryption happens automatically inside playbooks
+ansible-playbook playbooks/provision-and-configure.yml  # Validates once, then provisions & configures
+ansible-playbook playbooks/deploy-stack.yml             # Validates, then deploys
+```
+
+**Built-in automation:**
+
+- ✅ Environment variables loaded from `.env`
+- ✅ Configuration files validated
+- ✅ Vault files auto-encrypted if needed
+- ✅ DigitalOcean API tested
+- ✅ SSH keys verified
+- ✅ No separate preparation scripts needed
 
 ## Repository Strategy
 
@@ -216,17 +266,22 @@ This project includes an automated application deployment system using [Caddy Do
 
 ```bash
 # Deploy both proxy and all applications
-ansible-playbook playbooks/deploy-stack.yml --ask-vault-pass
+ansible-playbook playbooks/deploy-stack.yml
 
 # Deploy only the Caddy proxy
 ansible-playbook playbooks/deploy-stack.yml --tags caddy_proxy
 
 # Deploy only applications (update apps)
-ansible-playbook playbooks/deploy-stack.yml --tags deploy_apps --ask-vault-pass
+ansible-playbook playbooks/deploy-stack.yml --tags deploy_apps
 
 # Deploy to specific hosts
-ansible-playbook playbooks/deploy-stack.yml -l production --ask-vault-pass
+ansible-playbook playbooks/deploy-stack.yml -l production
 ```
+
+**Note**: All commands include automatic pre-deployment validation built into the playbooks. Both encrypted files are automatically decrypted:
+
+- `group_vars/prod.yml` (application configurations)
+- `inventory/hosts.yml` (server details)
 
 #### Adding New Applications
 
@@ -249,7 +304,7 @@ ansible-playbook playbooks/deploy-stack.yml -l production --ask-vault-pass
 
 3. **Deploy the new app**:
    ```bash
-   ansible-playbook playbooks/deploy-stack.yml --tags deploy_apps --ask-vault-pass
+   ansible-playbook playbooks/deploy-stack.yml --tags deploy_apps
    ```
 
 #### Application Requirements
@@ -338,25 +393,28 @@ all:
 
 ```bash
 # Provision and configure new droplets
-ansible-playbook playbooks/provision-and-configure.yml --ask-vault-pass
+ansible-playbook playbooks/provision-and-configure.yml
 
 # Only provision droplets
 ansible-playbook playbooks/provision-droplet.yml
 
 # Only configure existing droplets
-ansible-playbook playbooks/configure-server.yml --ask-vault-pass
+ansible-playbook playbooks/configure-server.yml
 
 # Deploy applications
-ansible-playbook playbooks/deploy-stack.yml --ask-vault-pass
+ansible-playbook playbooks/deploy-stack.yml
 
 # Destroy droplets
-ansible-playbook playbooks/destroy-droplet.yml --ask-vault-pass
+ansible-playbook playbooks/destroy-droplet.yml
 
 # View inventory
 ansible-vault view inventory/hosts.yml
 
 # Edit inventory
 ansible-vault edit inventory/hosts.yml
+
+# Test connectivity
+ansible digitalocean -m ping
 ```
 
 ## SSH Key Management
@@ -432,45 +490,97 @@ The automated setup includes:
 1. **Environment Variables Not Loading**:
 
    ```bash
-   # Use the prepare script to load and validate environment
-   source scripts/prepare.sh
+   # Environment variables are automatically loaded by playbooks from .env file
+   # If you need to check manually:
+   source .env && echo $DO_API_TOKEN
 
-   # Check if variables are set
-   echo $DO_API_TOKEN
+   # Or verify your .env file exists and has correct content:
+   cat .env
    ```
 
-2. **SSH Key Not Found**:
+2. **Vault Password Issues**:
+
+   ```bash
+   # If you get "Decryption failed" errors, check your .vault_pass file
+   cat .vault_pass  # Should contain your vault password
+
+   # If file doesn't exist, create it
+   echo "your-vault-password" > .vault_pass
+   chmod 600 .vault_pass
+
+   # Test vault access
+   ansible-vault view inventory/hosts.yml
+   ansible-vault view group_vars/prod.yml
+
+   # If you forgot your vault password, you'll need to recreate encrypted files
+   # This requires the old password to decrypt first
+   ansible-vault decrypt inventory/hosts.yml --ask-vault-pass  # With old password
+   ansible-vault decrypt group_vars/prod.yml --ask-vault-pass   # With old password
+   # Edit the files, then re-encrypt with new password
+   echo "new-vault-password" > .vault_pass
+   ansible-vault encrypt inventory/hosts.yml
+   ansible-vault encrypt group_vars/prod.yml
+
+   # If you want to change vault password for existing encrypted files
+   ansible-vault rekey inventory/hosts.yml
+   ansible-vault rekey group_vars/prod.yml
+   ```
+
+3. **SSH Connection Issues**:
+
+   ```bash
+   # Test SSH connection manually
+   ssh root@your-droplet-ip
+
+   # Check if 1Password SSH agent is working
+   ssh-add -l
+
+   # For new droplets, always connect as root first
+   ansible-playbook playbooks/configure-server.yml
+   ```
+
+4. **SSH Key Not Found**:
 
    - Ensure your SSH key is added to DigitalOcean
    - Use friendly key names in DO_SSH_KEYS
    - Verify 1Password SSH agent is configured correctly
 
-3. **Permission Denied**:
+5. **Permission Denied**:
 
    - Check that your SSH key has the correct permissions
    - Ensure the key is loaded in your SSH agent
 
-4. **Droplet Creation Fails**:
+6. **Droplet Creation Fails**:
 
    - Verify your DO_API_TOKEN is correct
    - Check that you have sufficient DigitalOcean credits
    - Ensure the region and size are valid
 
-5. **Application Deployment Issues**:
+7. **Application Deployment Issues**:
 
    - Check that the app repository has a docker-compose.yml
    - Verify Caddy labels are correctly formatted
    - Ensure the proxy network exists
 
-6. **Vault Password Issues**:
+8. **Inventory File Issues**:
 
    ```bash
-   # Create a vault password file (optional)
-   echo "your-vault-password" > .vault_pass
+   # If inventory seems corrupted or outdated
+   ansible-vault decrypt inventory/hosts.yml
+   ./scripts/update-inventory.sh --no-encrypt  # Regenerate
+   ansible-vault encrypt inventory/hosts.yml
+
+   # View current inventory
+   ansible-vault view inventory/hosts.yml
+
+   # Test inventory parsing
+   ansible-inventory --list
+
+   # If you get permission errors on .vault_pass
    chmod 600 .vault_pass
 
-   # Use in ansible.cfg
-   vault_password_file = .vault_pass
+   # Test vault password file is working
+   echo "Vault file test:" && ansible-vault view inventory/hosts.yml >/dev/null && echo "✅ Working" || echo "❌ Failed"
    ```
 
 ### Debug Mode
@@ -479,7 +589,7 @@ Run playbooks with verbose output:
 
 ```bash
 ansible-playbook -vvv playbooks/provision-and-configure.yml
-ansible-playbook -vvv playbooks/deploy-stack.yml --ask-vault-pass
+ansible-playbook -vvv playbooks/deploy-stack.yml
 ```
 
 ## File Structure
@@ -494,24 +604,28 @@ robo-ansible/
 │   ├── all.yml                   # Global variables
 │   └── prod.yml                  # Production config (encrypted)
 ├── inventory/
-│   └── hosts.yml                 # Inventory configuration
+│   ├── hosts.yml                 # Inventory configuration (encrypted)
+│   ├── hosts.yml.example        # Inventory template
+│   ├── production.yml           # Production hosts template
+│   └── backups/                 # Inventory backup directory
 ├── playbooks/
 │   ├── provision-and-configure.yml # Complete server setup
 │   ├── provision-droplet.yml     # Droplet provisioning
 │   ├── configure-server.yml      # Server configuration
 │   ├── deploy-stack.yml          # Application deployment
-│   └── destroy-droplet.yml       # Droplet destruction
+│   ├── destroy-droplet.yml       # Droplet destruction
+│   └── includes/
+│       └── validate_environment.yml # Shared validation tasks (auto-imported)
 ├── roles/
 │   ├── caddy_proxy/              # Caddy proxy setup
 │   └── deploy_apps/              # Application deployment
 ├── scripts/
 │   ├── bootstrap.sh               # One-time setup (Ansible + project init)
-│   ├── prepare.sh                 # Load environment + validation
 │   ├── encrypt-prod.sh            # Vault management
 │   ├── get-ssh-key-ids.sh         # SSH key lookup
-│   └── manage-inventory.sh        # Inventory management
-└── templates/
-    └── docker-compose.example.yml # App template
+│   └── update-inventory.sh        # Inventory management
+├── templates/
+│   └── docker-compose.example.yml # App template
 ```
 
 ## Security Considerations
@@ -559,7 +673,7 @@ For a complete example, see how to set up the [rekalled](https://github.com/robo
 
 3. **Deploy**:
    ```bash
-   ansible-playbook playbooks/deploy-stack.yml --ask-vault-pass
+   ansible-playbook playbooks/deploy-stack.yml
    ```
 
 The app will be automatically available at `https://rekalled.com` with a valid TLS certificate!

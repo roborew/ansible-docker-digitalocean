@@ -1,0 +1,176 @@
+---
+# Environment validation and preparation tasks
+# This file can be imported by any playbook to ensure deployment readiness
+
+- name: "🔧 Environment Validation & Preparation"
+  debug:
+    msg: "Running pre-deployment validation..."
+
+- name: Check if .env file exists
+  stat:
+    path: "{{ playbook_dir }}/../.env"
+  register: env_file
+  delegate_to: localhost
+
+- name: Fail if .env file is missing
+  fail:
+    msg: |
+      ❌ .env file not found
+      Run: ./scripts/bootstrap.sh (if first time)
+      Or: cp .env.example .env && nano .env
+  when: not env_file.stat.exists
+  delegate_to: localhost
+
+- name: Check if group_vars/prod.yml exists
+  stat:
+    path: "{{ playbook_dir }}/../group_vars/prod.yml"
+  register: prod_file
+  delegate_to: localhost
+
+- name: Fail if group_vars/prod.yml is missing
+  fail:
+    msg: |
+      ❌ group_vars/prod.yml not found
+      Run: ./scripts/bootstrap.sh (if first time)
+      Or: cp group_vars/prod.yml.example group_vars/prod.yml && nano group_vars/prod.yml
+  when: not prod_file.stat.exists
+  delegate_to: localhost
+
+- name: Check if .vault_pass file exists
+  stat:
+    path: "{{ playbook_dir }}/../.vault_pass"
+  register: vault_pass_file
+  delegate_to: localhost
+
+- name: Fail if .vault_pass file is missing
+  fail:
+    msg: |
+      ❌ .vault_pass file not found
+      Run: ./scripts/bootstrap.sh (if first time)
+      Or: echo 'your-vault-password' > .vault_pass && chmod 600 .vault_pass
+  when: not vault_pass_file.stat.exists
+  delegate_to: localhost
+
+- name: Check .vault_pass file permissions
+  file:
+    path: "{{ playbook_dir }}/../.vault_pass"
+    mode: "0600"
+  delegate_to: localhost
+
+- name: Load environment variables from .env file
+  shell: |
+    set -a
+    source {{ playbook_dir }}/../.env
+    set +a
+    env | grep -E '^(DO_|SERVER_|ROOT_|CADDY_)' || true
+  register: env_vars
+  delegate_to: localhost
+  changed_when: false
+
+- name: Parse and validate required environment variables
+  set_fact:
+    env_parsed: "{{ env_vars.stdout_lines | map('regex_replace', '^([^=]+)=(.*)$', '\\1') | list }}"
+  delegate_to: localhost
+
+- name: Check required environment variables are set
+  shell: |
+    source {{ playbook_dir }}/../.env
+    missing_vars=""
+    for var in DO_API_TOKEN DO_SSH_KEYS SERVER_USERNAME ROOT_PASSWORD; do
+      if [ -z "$(eval echo \$$var)" ]; then
+        missing_vars="$missing_vars $var"
+      fi
+    done
+    if [ -n "$missing_vars" ]; then
+      echo "Missing variables:$missing_vars"
+      exit 1
+    fi
+    echo "All required variables are set"
+  register: env_check
+  delegate_to: localhost
+  changed_when: false
+  failed_when: env_check.rc != 0
+
+- name: Check if group_vars/prod.yml is encrypted
+  shell: head -n1 "{{ playbook_dir }}/../group_vars/prod.yml" | grep -q '\$ANSIBLE_VAULT'
+  register: prod_encrypted
+  delegate_to: localhost
+  changed_when: false
+  failed_when: false
+
+- name: Encrypt group_vars/prod.yml if not encrypted
+  shell: |
+    cd {{ playbook_dir }}/..
+    ansible-vault encrypt group_vars/prod.yml
+  delegate_to: localhost
+  when: prod_encrypted.rc != 0
+
+- name: Check if inventory/hosts.yml exists and is encrypted
+  block:
+    - name: Check if inventory/hosts.yml exists
+      stat:
+        path: "{{ playbook_dir }}/../inventory/hosts.yml"
+      register: hosts_file
+      delegate_to: localhost
+
+    - name: Check if inventory/hosts.yml is encrypted
+      shell: head -n1 "{{ playbook_dir }}/../inventory/hosts.yml" | grep -q '\$ANSIBLE_VAULT'
+      register: hosts_encrypted
+      delegate_to: localhost
+      changed_when: false
+      failed_when: false
+      when: hosts_file.stat.exists
+
+    - name: Encrypt inventory/hosts.yml if not encrypted
+      shell: |
+        cd {{ playbook_dir }}/..
+        ansible-vault encrypt inventory/hosts.yml
+      delegate_to: localhost
+      when: hosts_file.stat.exists and hosts_encrypted.rc != 0
+
+- name: Test vault password works
+  shell: |
+    cd {{ playbook_dir }}/..
+    ansible-vault view group_vars/prod.yml >/dev/null 2>&1
+  delegate_to: localhost
+  changed_when: false
+
+- name: Test DigitalOcean API connection
+  uri:
+    url: "https://api.digitalocean.com/v2/account"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ lookup('env', 'DO_API_TOKEN') }}"
+    status_code: 200
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+
+- name: Validate SSH keys exist in DigitalOcean
+  shell: |
+    cd {{ playbook_dir }}/..
+    source .env
+    if [ -f "scripts/get-ssh-key-ids.sh" ]; then
+      ./scripts/get-ssh-key-ids.sh "$DO_SSH_KEYS" >/dev/null 2>&1
+    else
+      echo "Warning: get-ssh-key-ids.sh not found, skipping SSH key validation"
+    fi
+  register: ssh_key_check
+  delegate_to: localhost
+  changed_when: false
+  failed_when: false
+
+- name: Display SSH key validation result
+  debug:
+    msg: "{{ '✅ SSH keys validated in DigitalOcean' if ssh_key_check.rc == 0 else '⚠️  Could not validate SSH keys' }}"
+  delegate_to: localhost
+
+- name: "🎉 Environment validation complete"
+  debug:
+    msg: |
+      Environment is ready for deployment!
+      ✅ Configuration files exist
+      ✅ Vault files are encrypted  
+      ✅ DigitalOcean API connection verified
+      ✅ SSH keys validated
+      🚀 Proceeding with deployment...

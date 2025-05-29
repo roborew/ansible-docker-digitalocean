@@ -1,4 +1,15 @@
 ---
+# Environment validation (runs on localhost first)
+- name: Environment Validation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    # Environment validation and preparation (runs once for entire workflow)
+    - import_tasks: includes/validate_environment.yml
+
+# Main deployment play (runs on remote servers)
 - name: Deploy Caddy Proxy and Applications
   hosts: digitalocean
   become: true
