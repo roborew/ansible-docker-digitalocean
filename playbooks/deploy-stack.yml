@@ -54,6 +54,9 @@
     - role: caddy_proxy
       tags: ["caddy_proxy"]
 
+    - role: deploy_ssh_keys
+      tags: ["deploy_ssh_keys", "deploy_apps"]
+
     - role: deploy_apps
       tags: ["deploy_apps"]
 

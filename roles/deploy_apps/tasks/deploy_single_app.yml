@@ -24,6 +24,9 @@
       - Hostname: {{ app_hostname }}
       - Port: {{ app_port }}
 
+- name: "Setup SSH keys for private repository access"
+  include_tasks: setup_ssh_keys.yml
+
 - name: "Create Capistrano directory structure for {{ app_name }}"
   file:
     path: "{{ item }}"
@@ -42,7 +45,7 @@
 
 - name: "Clone repository to repo cache for {{ app_name }}"
   git:
-    repo: "{{ app_repo }}"
+    repo: "{{ app_repo_ssh | default(app_repo) }}"
     dest: "{{ app_base_dir }}/repo"
     version: "{{ app_branch }}"
     force: "{{ git_force_update | default(true) }}"

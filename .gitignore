@@ -17,7 +17,8 @@ inventory/backups/
 inventory/hosts.yml
 # Keep inventory/production.yml as template
 
-# SSH keys
+# SSH keys (SECURITY: Never commit private keys!)
+files/ssh_keys/
 *.pem
 *.key
 id_rsa*

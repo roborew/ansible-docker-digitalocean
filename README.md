@@ -52,6 +52,13 @@ This Ansible project automates the provisioning and configuration of DigitalOcea
 3. **Setup Environment Files** (for your applications):
 
    ```bash
+   # Generate deploy keys for private repositories (run after step 2)
+   ./scripts/setup-deploy-keys.sh
+
+   # Manually add the displayed public keys to your GitHub repositories:
+   # Go to: github.com/username/repo → Settings → Deploy keys → Add deploy key
+   # Paste the public key and optionally enable "Allow write access"
+
    # Create environment file templates for each app
    ansible-playbook playbooks/manage-env.yml -e action=create -e app_name=myapp
 
@@ -63,9 +70,14 @@ This Ansible project automates the provisioning and configuration of DigitalOcea
    ```
 
 4. **Deploy** (with automatic validation & encryption):
+
    ```bash
+   # Works for both public and private repositories
    ansible-playbook playbooks/provision-and-configure.yml
    ansible-playbook playbooks/deploy-stack.yml
+
+   # SSH keys for private repos are automatically deployed and detected
+   # No manual parameters needed!
    ```
 
 ### **🔄 Returning User Workflow**
@@ -168,6 +180,61 @@ ansible digitalocean -m shell -a "ls -la /opt/myapp/shared/logs/"
 # Check available releases
 ansible digitalocean -m shell -a "ls -la /opt/myapp/releases/"
 ```
+
+#### **🔐 Private Repository Support**
+
+This deployment system supports both public and private GitHub repositories with **automatic SSH key management**.
+
+#### **Deploy Key Setup (for private repositories)**
+
+```bash
+# Generate deploy keys for your configured apps (after step 2)
+./scripts/setup-deploy-keys.sh
+
+# The script will display public keys for each app
+# Add each public key to the corresponding GitHub repository:
+# 1. Go to: github.com/username/repo-name
+# 2. Settings → Deploy keys → Add deploy key
+# 3. Paste the public key and give it a descriptive title
+# 4. ✅ Check "Allow write access" (optional, for push capability)
+```
+
+#### **Deployment with Private Repositories**
+
+```bash
+# SSH keys are automatically deployed and detected
+# Same commands work for both public and private repositories!
+
+# Initial deployment
+ansible-playbook playbooks/deploy-stack.yml
+
+# Subsequent deployments
+ansible-playbook playbooks/deploy.yml
+
+# Branch deployments
+ansible-playbook playbooks/deploy.yml -e mode=branch -e branch=feature-name
+
+# Rollbacks (no special parameters needed)
+ansible-playbook playbooks/deploy.yml -e mode=rollback
+```
+
+#### **How Automatic Detection Works**
+
+✅ **SSH keys deployed once** - During `deploy-stack.yml`  
+✅ **Automatic per-app detection** - Each app checks for its own key  
+✅ **Smart URL conversion** - HTTPS URLs automatically converted to SSH when keys exist  
+✅ **Zero configuration** - No manual parameters or configuration needed  
+✅ **Multiple repos supported** - All private repos work simultaneously
+
+#### **Security Best Practices**
+
+✅ **Deploy keys are app-specific** - Each app has its own key  
+✅ **Read-only by default** - Deploy keys don't have push access unless enabled  
+✅ **Easy to revoke** - Remove from GitHub repo settings if compromised  
+✅ **Stored securely** - Private keys never committed to git (`.gitignore` protected)  
+✅ **Proper permissions** - Keys deployed with 600 permissions on server
+
+**Note**: The system automatically falls back to HTTPS for repositories without deploy keys.
 
 ### **🔐 Environment File Management**
 
@@ -319,10 +386,11 @@ ansible-playbook playbooks/deploy-stack.yml --ask-vault-pass
 
 ### **🛠️ Script Overview**
 
-| Script            | Purpose                                                             | When to Use                 |
-| ----------------- | ------------------------------------------------------------------- | --------------------------- |
-| `bootstrap.sh`    | Install Ansible, collections, initialize project files              | **Once** (first time)       |
-| `encrypt-prod.sh` | Manual vault encryption (auto-encryption also built into playbooks) | **Manual vault operations** |
+| Script                 | Purpose                                                             | When to Use                 |
+| ---------------------- | ------------------------------------------------------------------- | --------------------------- |
+| `bootstrap.sh`         | Install Ansible, collections, initialize project files              | **Once** (first time)       |
+| `setup-deploy-keys.sh` | Generate SSH deploy keys for private repositories                   | **After configuring apps**  |
+| `encrypt-prod.sh`      | Manual vault encryption (auto-encryption also built into playbooks) | **Manual vault operations** |
 
 **🎯 Pure Ansible Workflow:**
 
@@ -843,284 +911,3 @@ ansible-playbook playbooks/deploy-stack.yml -e verbose=true
 # Rebuild specific apps with full output
 ansible-playbook playbooks/troubleshoot-apps.yml
 ```
-
-#### **🛠️ Interactive Troubleshooting**
-
-The troubleshooting playbook provides an interactive menu for Docker management:
-
-```bash
-ansible-playbook playbooks/troubleshoot-apps.yml
-```
-
-This will prompt you for:
-
-- **Target app**: Which app to troubleshoot (or 'all')
-- **Action**: logs, rebuild, restart, status, cleanup
-- **Force rebuild**: Complete rebuild with no cache
-
-#### **📊 Quick Docker Commands**
-
-For immediate troubleshooting, use the debug helper script:
-
-```bash
-# Quick status check
-./scripts/docker-debug.sh myapp status
-
-# View recent logs
-./scripts/docker-debug.sh myapp logs
-
-# Follow live logs (Ctrl+C to exit)
-./scripts/docker-debug.sh myapp live
-
-# Rebuild with full output
-./scripts/docker-debug.sh myapp rebuild
-
-# Get shell access to container
-./scripts/docker-debug.sh myapp shell
-
-# System-wide Docker cleanup
-./scripts/docker-debug.sh cleanup
-```
-
-### Build Failure Handling
-
-#### **🔍 Diagnosing Build Issues**
-
-When builds fail, logs are automatically saved:
-
-```bash
-# On your server, check build logs:
-ssh user@your-server
-cat /tmp/myapp_build.log
-cat /tmp/myapp_deploy.log
-
-# View deployment history:
-ls /var/log/ansible-deployments/myapp_*.log
-```
-
-#### **🔄 Recovery Options**
-
-**Option 1: Force Rebuild**
-
-```bash
-# Complete rebuild (clears cache, pulls latest code)
-ansible-playbook playbooks/troubleshoot-apps.yml
-# Select your app → rebuild → force rebuild: y
-```
-
-**Option 2: Manual Rebuild**
-
-```bash
-# SSH to server and rebuild manually
-ssh user@your-server
-cd /opt/myapp
-docker compose down
-docker compose build --progress=plain --no-cache
-docker compose up -d
-```
-
-**Option 3: Rollback to Previous Version**
-
-```bash
-# If you have a working version, restart without rebuilding
-ansible-playbook playbooks/troubleshoot-apps.yml
-# Select your app → restart
-```
-
-#### **🧹 Cleanup Failed Builds**
-
-When builds fail, they can leave behind partial images and containers:
-
-```bash
-# Clean up Docker resources
-ansible-playbook playbooks/troubleshoot-apps.yml
-# Select cleanup action
-
-# Or use the helper script
-./scripts/docker-debug.sh cleanup
-```
-
-### Common Build Issues & Solutions
-
-#### **1. Out of Disk Space**
-
-```bash
-# Check disk usage
-ssh user@your-server
-df -h
-docker system df
-
-# Clean up space
-docker system prune -af
-docker volume prune -f
-```
-
-#### **2. Network/Download Issues**
-
-```bash
-# Retry with fresh network connections
-cd /opt/myapp
-docker compose build --no-cache --pull
-```
-
-#### **3. Cache Issues**
-
-```bash
-# Force rebuild without cache
-docker compose build --no-cache
-docker builder prune -af
-```
-
-#### **4. Permission Issues**
-
-```bash
-# Check file ownership
-ls -la /opt/myapp
-sudo chown -R $(whoami):$(whoami) /opt/myapp
-```
-
-#### **5. Port Conflicts**
-
-```bash
-# Check what's using ports
-ss -tulpn | grep :3000
-docker ps
-
-# Stop conflicting containers
-docker stop $(docker ps -q)
-```
-
-### Log Monitoring
-
-#### **📋 Real-time Monitoring**
-
-```bash
-# Monitor all apps during deployment
-ansible-playbook playbooks/deploy-stack.yml -e verbose=true
-
-# Watch specific app logs live
-ssh user@your-server
-cd /opt/myapp && docker compose logs -f
-```
-
-#### **📄 Log Locations**
-
-```
-/tmp/[app-name]_build.log       # Latest build output
-/tmp/[app-name]_deploy.log      # Latest deployment output
-/tmp/[app-name]_rebuild.log     # Manual rebuild logs
-/var/log/ansible-deployments/  # Full deployment history
-```
-
-#### **🔍 Advanced Debugging**
-
-```bash
-# Inspect container details
-./scripts/docker-debug.sh myapp inspect
-
-# Check resource usage
-./scripts/docker-debug.sh myapp status
-
-# Get interactive shell in container
-./scripts/docker-debug.sh myapp shell
-```
-
-## File Structure
-
-```
-robo-ansible/
-├── ansible.cfg                    # Ansible configuration
-├── requirements.txt               # Python dependencies
-├── README.md                      # This file
-├── .env.example                   # Environment variables template
-├── group_vars/
-│   ├── all.yml                   # Global variables
-│   └── prod.yml                  # Production config (encrypted)
-├── inventory/
-│   ├── hosts.yml                 # Inventory configuration (encrypted)
-│   ├── hosts.yml.example        # Inventory template
-│   ├── production.yml           # Production hosts template
-│   └── backups/                 # Inventory backup directory
-├── playbooks/
-│   ├── provision-and-configure.yml # Complete server setup
-│   ├── provision-droplet.yml     # Droplet provisioning
-│   ├── configure-server.yml      # Server configuration
-│   ├── deploy-stack.yml          # Application deployment
-│   ├── troubleshoot-apps.yml     # Docker troubleshooting & management
-│   ├── destroy-droplet.yml       # Droplet destruction
-│   └── includes/
-│       └── validate_environment.yml # Shared validation tasks (auto-imported)
-├── roles/
-│   ├── caddy_proxy/              # Caddy proxy setup
-│   └── deploy_apps/              # Application deployment & troubleshooting
-├── scripts/
-│   ├── bootstrap.sh               # One-time setup (Ansible + project init)
-│   ├── encrypt-prod.sh            # Vault management
-│   ├── get-ssh-key-ids.sh         # SSH key lookup
-│   ├── update-inventory.sh        # Inventory management
-│   └── docker-debug.sh            # Docker troubleshooting helper
-├── templates/
-│   └── docker-compose.example.yml # App template
-```
-
-## Security Considerations
-
-- SSH keys are never stored in the repository
-- Production configuration is encrypted with ansible-vault
-- UFW firewall is configured with deny-by-default
-- Only necessary ports are opened (22, 80, 443)
-- Non-root user is created for daily operations
-- Docker socket access is limited to docker group
-- TLS certificates are automatically managed by Caddy
-
-## Example Application Setup
-
-For a complete example, see how to set up a sample application:
-
-1. **Configure in prod.yml**:
-
-   ```yaml
-   apps:
-     - name: "myapp"
-       repo: "https://github.com/yourusername/myapp.git"
-       branch: "main"
-       hostname: "myapp.example.com"
-       port: "3000"
-   ```
-
-2. **App's docker-compose.yml should include**:
-
-   ```yaml
-   services:
-     app:
-       # your app configuration
-       networks:
-         - proxy
-       labels:
-         caddy: "${CADDY_HOSTNAME:-myapp.example.com}"
-         caddy.reverse_proxy: "{{upstreams ${CADDY_PORT:-3000}}}"
-
-   networks:
-     proxy:
-       external: true
-       name: ${PROXY_NETWORK:-proxy}
-   ```
-
-3. **Deploy**:
-   ```bash
-   ansible-playbook playbooks/deploy-stack.yml
-   ```
-
-The app will be automatically available at `https://myapp.example.com` with a valid TLS certificate!
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test with a development droplet
-5. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.

@@ -1,0 +1,29 @@
+---
+# Setup SSH keys for private repository access (automatic detection)
+
+- name: "Check if deploy key exists for {{ app_name }}"
+  stat:
+    path: "/home/{{ apps_user }}/.ssh/{{ app_name }}_deploy_key"
+  register: deploy_key_exists
+
+- name: "Convert GitHub repo URL to use SSH alias for {{ app_name }}"
+  set_fact:
+    app_repo_ssh: "{{ app_repo | regex_replace('https://github.com/', 'git@github.com-' + app_name + ':') | regex_replace('\\.git$', '.git') }}"
+  when: 
+    - deploy_key_exists.stat.exists
+    - "'github.com' in app_repo"
+
+- name: "Use original repo URL for {{ app_name }} (no deploy key or not GitHub)"
+  set_fact:
+    app_repo_ssh: "{{ app_repo }}"
+  when: 
+    - not deploy_key_exists.stat.exists or 'github.com' not in app_repo
+
+- name: "Display repository access method for {{ app_name }}"
+  debug:
+    msg: |
+      📍 Repository access for {{ app_name }}:
+      - Original: {{ app_repo }}
+      - Using: {{ app_repo_ssh }}
+      - Deploy key: {{ 'Yes' if deploy_key_exists.stat.exists else 'No' }}
+      - Method: {{ 'SSH with deploy key' if deploy_key_exists.stat.exists and 'github.com' in app_repo else 'HTTPS (public repo)' }}

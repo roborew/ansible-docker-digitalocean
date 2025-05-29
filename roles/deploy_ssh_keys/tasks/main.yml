@@ -1,0 +1,73 @@
+---
+# Deploy SSH keys for private repositories
+# Respects .env and all.yml configuration system
+
+- name: "Create .ssh directory for {{ apps_user }}"
+  file:
+    path: "/home/{{ apps_user }}/.ssh"
+    state: directory
+    owner: "{{ apps_user }}"
+    group: "{{ apps_group }}"
+    mode: "0700"
+
+- name: "Find all deploy keys locally"
+  find:
+    paths: "{{ playbook_dir }}/../files/ssh_keys"
+    patterns: "*_deploy_key"
+    file_type: file
+  register: deploy_keys
+  delegate_to: localhost
+  become: false
+
+- name: "Deploy all private SSH keys to server"
+  copy:
+    src: "{{ item.path }}"
+    dest: "/home/{{ apps_user }}/.ssh/{{ item.path | basename }}"
+    owner: "{{ apps_user }}"
+    group: "{{ apps_group }}"
+    mode: "0600"
+  loop: "{{ deploy_keys.files }}"
+  when: deploy_keys.files | length > 0
+
+- name: "Extract app names from deploy keys"
+  set_fact:
+    key_apps: "{{ deploy_keys.files | map(attribute='path') | map('basename') | map('regex_replace', '_deploy_key$', '') | list }}"
+  when: deploy_keys.files | length > 0
+
+- name: "Configure SSH for all private repositories"
+  blockinfile:
+    path: "/home/{{ apps_user }}/.ssh/config"
+    create: yes
+    owner: "{{ apps_user }}"
+    group: "{{ apps_group }}"
+    mode: "0600"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - ALL DEPLOY KEYS"
+    block: |
+      {% for app in key_apps | default([]) %}
+      Host github.com-{{ app }}
+        HostName github.com
+        User git
+        IdentityFile ~/.ssh/{{ app }}_deploy_key
+        IdentitiesOnly yes
+        StrictHostKeyChecking no
+
+      {% endfor %}
+  when: deploy_keys.files | length > 0
+
+- name: "Display SSH key deployment summary"
+  debug:
+    msg: |
+      🔑 SSH Deploy Keys Status:
+
+      {% if deploy_keys.files | length > 0 %}
+      📋 Deployed {{ deploy_keys.files | length }} private keys for:
+      {% for app in key_apps | default([]) %}
+      - {{ app }}
+      {% endfor %}
+
+      🔧 SSH Config: /home/{{ apps_user }}/.ssh/config
+      ✅ Private repositories will work automatically!
+      {% else %}
+      ℹ️  No deploy keys found - using HTTPS for public repositories
+      💡 To use private repos: ./scripts/setup-deploy-keys.sh
+      {% endif %}
