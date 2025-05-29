@@ -61,7 +61,7 @@
       include_tasks: ../roles/deploy_apps/tasks/deploy_single_app.yml
       loop: "{{ selected_apps }}"
       loop_control:
-        loop_var: app
+        loop_var: current_app
       when: deployment_mode == 'normal'
 
     # Branch deployment
@@ -69,7 +69,7 @@
       include_tasks: ../roles/deploy_apps/tasks/deploy_branch.yml
       loop: "{{ selected_apps }}"
       loop_control:
-        loop_var: app
+        loop_var: current_app
       when: deployment_mode == 'branch'
 
     # Rollback deployment
@@ -77,7 +77,7 @@
       include_tasks: ../roles/deploy_apps/tasks/rollback_single_app.yml
       loop: "{{ selected_apps }}"
       loop_control:
-        loop_var: app
+        loop_var: current_app
       when: deployment_mode == 'rollback'
 
   post_tasks:

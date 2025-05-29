@@ -2,16 +2,16 @@
 # Capistrano-style deployment for a single app
 # Directory structure: /opt/app-name/{current, releases, shared, repo}
 
-- name: "Set app variables for {{ app.name }}"
+- name: "Set app variables for {{ current_app.name }}"
   set_fact:
-    app_name: "{{ app.name }}"
-    app_repo: "{{ app.repo }}"
-    app_branch: "{{ app.branch | default('main') }}"
-    app_base_dir: "{{ apps_base_dir }}/{{ app.name }}"
-    app_hostname: "{{ app.hostname | default(app.name + '.' + ansible_default_ipv4.address + '.nip.io') }}"
-    app_port: "{{ app.port | default('3000') }}"
+    app_name: "{{ current_app.name }}"
+    app_repo: "{{ current_app.repo }}"
+    app_branch: "{{ current_app.branch | default('main') }}"
+    app_base_dir: "{{ apps_base_dir }}/{{ current_app.name }}"
+    app_hostname: "{{ current_app.hostname | default(current_app.name + '.' + ansible_default_ipv4.address + '.nip.io') }}"
+    app_port: "{{ current_app.port | default('3000') }}"
     deploy_timestamp: "{{ ansible_date_time.epoch }}"
-    release_dir: "{{ apps_base_dir }}/{{ app.name }}/releases/{{ ansible_date_time.epoch }}"
+    release_dir: "{{ apps_base_dir }}/{{ current_app.name }}/releases/{{ ansible_date_time.epoch }}"
 
 - name: "Display deployment info for {{ app_name }}"
   debug:
@@ -68,23 +68,46 @@
   become: true
   become_user: "{{ apps_user }}"
 
-- name: "Check if .env.vault exists for {{ app_name }}"
+- name: "Check if .env.vault exists locally for {{ app_name }}"
   stat:
-    path: "{{ app_base_dir }}/shared/config/.env.vault"
-  register: env_vault_exists
+    path: "{{ playbook_dir }}/../env_files/{{ app_name }}.env.vault"
+  register: local_env_vault_exists
+  delegate_to: localhost
+  become: false
 
-- name: "Decrypt .env file for {{ app_name }}"
+- name: "Decrypt .env file locally for {{ app_name }}"
   shell: |
-    if [ -f "{{ app_base_dir }}/shared/config/.env.vault" ]; then
-      ansible-vault decrypt "{{ app_base_dir }}/shared/config/.env.vault" --output="{{ app_base_dir }}/shared/config/.env"
-      echo "✅ .env file decrypted"
+    cd {{ playbook_dir }}/..
+    if [ -f "env_files/{{ app_name }}.env.vault" ]; then
+      ansible-vault decrypt "env_files/{{ app_name }}.env.vault" --output="/tmp/{{ app_name }}.env.decrypted" --vault-password-file=.vault_pass
+      echo "✅ .env file decrypted locally"
     else
-      echo "⚠️  No .env.vault found, skipping decryption"
+      echo "⚠️  No .env.vault found locally, skipping decryption"
+      exit 1
     fi
+  delegate_to: localhost
+  become: false
+  register: local_env_decrypt_result
+  when: local_env_vault_exists.stat.exists
+  changed_when: false
+
+- name: "Transfer decrypted .env file to server for {{ app_name }}"
+  copy:
+    src: "/tmp/{{ app_name }}.env.decrypted"
+    dest: "{{ app_base_dir }}/shared/config/.env"
+    owner: "{{ apps_user }}"
+    group: "{{ apps_group }}"
+    mode: "0600"
   become: true
-  become_user: "{{ apps_user }}"
-  register: env_decrypt_result
-  when: env_vault_exists.stat.exists
+  when: local_env_vault_exists.stat.exists
+
+- name: "Clean up local temporary .env file for {{ app_name }}"
+  file:
+    path: "/tmp/{{ app_name }}.env.decrypted"
+    state: absent
+  delegate_to: localhost
+  become: false
+  when: local_env_vault_exists.stat.exists
 
 - name: "Create symlinks to shared files for {{ app_name }}"
   file:

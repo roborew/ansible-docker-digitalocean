@@ -1,6 +1,6 @@
 # Server Configuration
 do_region: "lon1" # London region
-do_size: "s-2vcpu-2gb-amd" # Basic AMD with 1GB RAM
+do_size: "s-1vcpu-2gb-amd" # Basic AMD with 1GB RAM
 do_image: "ubuntu-24-04-x64" # Ubuntu 24.04 LTS
 do_monitoring: true # Enable DigitalOcean monitoring/metrics
 
@@ -9,6 +9,13 @@ do_token: "{{ lookup('env', 'DO_API_TOKEN') }}"
 do_ssh_keys: "{{ lookup('env', 'DO_SSH_KEYS') | split(',') }}"
 server_user: "{{ lookup('env', 'SERVER_USERNAME') }}"
 root_password: "{{ lookup('env', 'ROOT_PASSWORD') }}"
+
+# Apps Configuration
+apps_user: "{{ server_user }}"
+apps_group: "{{ server_user }}"
+apps_base_dir: "/opt"
+compose_command: "docker compose"
+
 server_packages:
   - apt-transport-https
   - ca-certificates

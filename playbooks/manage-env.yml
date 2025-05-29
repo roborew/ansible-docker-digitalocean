@@ -118,6 +118,10 @@
                 ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name={{ app_name }}
           when: not deploy_vault_check.stat.exists
 
+        - name: "📋 Load configuration variables"
+          include_vars:
+            file: "{{ playbook_dir }}/../group_vars/all.yml"
+
         - name: "📤 Deploy encrypted .env file to server"
           copy:
             src: "{{ env_files_dir }}/{{ app_name }}.env.vault"
