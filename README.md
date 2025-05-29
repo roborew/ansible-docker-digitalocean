@@ -53,13 +53,13 @@ This Ansible project automates the provisioning and configuration of DigitalOcea
 
    ```bash
    # Create environment file templates for each app
-   ansible-playbook playbooks/manage-env.yml -e action=create -e app_name=rekalled
+   ansible-playbook playbooks/manage-env.yml -e action=create -e app_name=myapp
 
    # Edit the environment files
-   ./scripts/manage-env.sh edit rekalled
+   ./scripts/manage-env.sh edit myapp
 
    # Encrypt them for security
-   ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name=rekalled
+   ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name=myapp
    ```
 
 4. **Deploy** (with automatic validation & encryption):
@@ -124,7 +124,7 @@ ansible-playbook playbooks/deploy.yml
 ansible-playbook playbooks/deploy.yml -e verbose=true
 
 # Deploy specific app only
-ansible-playbook playbooks/deploy.yml -e app=rekalled
+ansible-playbook playbooks/deploy.yml -e app=myapp
 ```
 
 #### **Branch Deployments (Testing & Staging)**
@@ -134,7 +134,7 @@ ansible-playbook playbooks/deploy.yml -e app=rekalled
 ansible-playbook playbooks/deploy.yml -e mode=branch -e branch=feature-auth
 
 # Deploy specific app branch
-ansible-playbook playbooks/deploy.yml -e mode=branch -e branch=hotfix-123 -e app=rekalled
+ansible-playbook playbooks/deploy.yml -e mode=branch -e branch=hotfix-123 -e app=myapp
 
 # Deploy branch with unique subdomain (automatic)
 # Creates: feature-auth-456789.yourdomain.com
@@ -150,7 +150,7 @@ ansible-playbook playbooks/deploy.yml -e mode=rollback
 ansible-playbook playbooks/deploy.yml -e mode=rollback -e release=1640995200
 
 # Rollback specific app only
-ansible-playbook playbooks/deploy.yml -e mode=rollback -e app=rekalled
+ansible-playbook playbooks/deploy.yml -e mode=rollback -e app=myapp
 ```
 
 #### **System Testing & Monitoring**
@@ -160,13 +160,13 @@ ansible-playbook playbooks/deploy.yml -e mode=rollback -e app=rekalled
 ansible-playbook playbooks/test-deployment.yml
 
 # Quick status check
-ansible digitalocean -m shell -a "cd /opt/rekalled/current && docker compose ps"
+ansible digitalocean -m shell -a "cd /opt/myapp/current && docker compose ps"
 
 # View recent deployment logs
-ansible digitalocean -m shell -a "ls -la /opt/rekalled/shared/logs/"
+ansible digitalocean -m shell -a "ls -la /opt/myapp/shared/logs/"
 
 # Check available releases
-ansible digitalocean -m shell -a "ls -la /opt/rekalled/releases/"
+ansible digitalocean -m shell -a "ls -la /opt/myapp/releases/"
 ```
 
 ### **🔐 Environment File Management**
@@ -175,28 +175,28 @@ Environment files are managed securely with encryption and proper deployment:
 
 #### **📍 Environment File Locations**
 
-| Location                                 | Purpose                   | Security       |
-| ---------------------------------------- | ------------------------- | -------------- |
-| `env_files/rekalled.env`                 | Local editing (temporary) | ⚠️ Unencrypted |
-| `env_files/rekalled.env.vault`           | Local storage             | ✅ Encrypted   |
-| `/opt/rekalled/shared/config/.env.vault` | Server storage            | ✅ Encrypted   |
-| `/opt/rekalled/shared/config/.env`       | Server runtime            | ⚠️ Decrypted   |
-| `/opt/rekalled/current/.env`             | Application access        | 🔗 Symlink     |
+| Location                              | Purpose                   | Security       |
+| ------------------------------------- | ------------------------- | -------------- |
+| `env_files/myapp.env`                 | Local editing (temporary) | ⚠️ Unencrypted |
+| `env_files/myapp.env.vault`           | Local storage             | ✅ Encrypted   |
+| `/opt/myapp/shared/config/.env.vault` | Server storage            | ✅ Encrypted   |
+| `/opt/myapp/shared/config/.env`       | Server runtime            | ⚠️ Decrypted   |
+| `/opt/myapp/current/.env`             | Application access        | 🔗 Symlink     |
 
 #### **🔧 Environment Management Commands**
 
 ```bash
 # Create new .env template
-ansible-playbook playbooks/manage-env.yml -e action=create -e app_name=rekalled
+ansible-playbook playbooks/manage-env.yml -e action=create -e app_name=myapp
 
 # Edit .env file locally (quick helper)
-./scripts/manage-env.sh edit rekalled
+./scripts/manage-env.sh edit myapp
 
 # Encrypt .env file for security
-ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name=rekalled
+ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name=myapp
 
 # Deploy encrypted .env to server
-ansible-playbook playbooks/manage-env.yml -e action=deploy -e app_name=rekalled
+ansible-playbook playbooks/manage-env.yml -e action=deploy -e app_name=myapp
 
 # List all managed .env files
 ansible-playbook playbooks/manage-env.yml -e action=list
@@ -233,16 +233,16 @@ ansible-playbook playbooks/manage-env.yml
 ansible-playbook playbooks/test-deployment.yml
 
 # Check specific app status
-ansible digitalocean -m shell -a "cd /opt/rekalled/current && docker compose ps"
+ansible digitalocean -m shell -a "cd /opt/myapp/current && docker compose ps"
 
 # View deployment logs
-ansible digitalocean -m shell -a "tail -f /opt/rekalled/shared/logs/deploy_*.log"
+ansible digitalocean -m shell -a "tail -f /opt/myapp/shared/logs/deploy_*.log"
 
 # Check release history
-ansible digitalocean -m shell -a "ls -lat /opt/rekalled/releases/"
+ansible digitalocean -m shell -a "ls -lat /opt/myapp/releases/"
 
 # View application logs
-ansible digitalocean -m shell -a "cd /opt/rekalled/current && docker compose logs --tail=50"
+ansible digitalocean -m shell -a "cd /opt/myapp/current && docker compose logs --tail=50"
 ```
 
 ### **🔄 Typical Workflow**
@@ -257,9 +257,9 @@ ansible digitalocean -m shell -a "cd /opt/rekalled/current && docker compose log
    nano .env && nano group_vars/prod.yml
 
    # Create and encrypt app environment files
-   ansible-playbook playbooks/manage-env.yml -e action=create -e app_name=rekalled
-   ./scripts/manage-env.sh edit rekalled
-   ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name=rekalled
+   ansible-playbook playbooks/manage-env.yml -e action=create -e app_name=myapp
+   ./scripts/manage-env.sh edit myapp
+   ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name=myapp
 
    # Deploy everything
    ansible-playbook playbooks/deploy-stack.yml
@@ -789,7 +789,7 @@ The automated setup includes:
 
    # Check build logs
    ssh user@your-server
-   cat /tmp/your-app_build.log
+   cat /tmp/myapp_build.log
 
    # Manual rebuild with full output
    ./scripts/docker-debug.sh myapp rebuild
@@ -891,11 +891,11 @@ When builds fail, logs are automatically saved:
 ```bash
 # On your server, check build logs:
 ssh user@your-server
-cat /tmp/your-app_build.log
-cat /tmp/your-app_deploy.log
+cat /tmp/myapp_build.log
+cat /tmp/myapp_deploy.log
 
 # View deployment history:
-ls /var/log/ansible-deployments/your-app_*.log
+ls /var/log/ansible-deployments/myapp_*.log
 ```
 
 #### **🔄 Recovery Options**
@@ -913,7 +913,7 @@ ansible-playbook playbooks/troubleshoot-apps.yml
 ```bash
 # SSH to server and rebuild manually
 ssh user@your-server
-cd /opt/your-app
+cd /opt/myapp
 docker compose down
 docker compose build --progress=plain --no-cache
 docker compose up -d
@@ -959,7 +959,7 @@ docker volume prune -f
 
 ```bash
 # Retry with fresh network connections
-cd /opt/your-app
+cd /opt/myapp
 docker compose build --no-cache --pull
 ```
 
@@ -975,8 +975,8 @@ docker builder prune -af
 
 ```bash
 # Check file ownership
-ls -la /opt/your-app
-sudo chown -R $(whoami):$(whoami) /opt/your-app
+ls -la /opt/myapp
+sudo chown -R $(whoami):$(whoami) /opt/myapp
 ```
 
 #### **5. Port Conflicts**
@@ -1000,7 +1000,7 @@ ansible-playbook playbooks/deploy-stack.yml -e verbose=true
 
 # Watch specific app logs live
 ssh user@your-server
-cd /opt/your-app && docker compose logs -f
+cd /opt/myapp && docker compose logs -f
 ```
 
 #### **📄 Log Locations**
@@ -1075,16 +1075,16 @@ robo-ansible/
 
 ## Example Application Setup
 
-For a complete example, see how to set up the [rekalled](https://github.com/roborew/rekalled) application:
+For a complete example, see how to set up a sample application:
 
 1. **Configure in prod.yml**:
 
    ```yaml
    apps:
-     - name: "rekalled"
-       repo: "https://github.com/roborew/rekalled.git"
+     - name: "myapp"
+       repo: "https://github.com/yourusername/myapp.git"
        branch: "main"
-       hostname: "rekalled.com"
+       hostname: "myapp.example.com"
        port: "3000"
    ```
 
@@ -1097,7 +1097,7 @@ For a complete example, see how to set up the [rekalled](https://github.com/robo
        networks:
          - proxy
        labels:
-         caddy: "${CADDY_HOSTNAME:-rekalled.com}"
+         caddy: "${CADDY_HOSTNAME:-myapp.example.com}"
          caddy.reverse_proxy: "{{upstreams ${CADDY_PORT:-3000}}}"
 
    networks:
@@ -1111,7 +1111,7 @@ For a complete example, see how to set up the [rekalled](https://github.com/robo
    ansible-playbook playbooks/deploy-stack.yml
    ```
 
-The app will be automatically available at `https://rekalled.com` with a valid TLS certificate!
+The app will be automatically available at `https://myapp.example.com` with a valid TLS certificate!
 
 ## Contributing
 

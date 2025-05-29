@@ -201,9 +201,9 @@
 
           Examples:
           ---------
-          ansible-playbook playbooks/manage-env.yml -e action=create -e app_name=rekalled
-          ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name=rekalled
-          ansible-playbook playbooks/manage-env.yml -e action=deploy -e app_name=rekalled
+          ansible-playbook playbooks/manage-env.yml -e action=create -e app_name=myapp
+          ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name=myapp
+          ansible-playbook playbooks/manage-env.yml -e action=deploy -e app_name=myapp
           ansible-playbook playbooks/manage-env.yml -e action=list
 
           Workflow:
