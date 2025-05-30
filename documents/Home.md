@@ -5,8 +5,7 @@ Welcome to the complete documentation for the Ansible DigitalOcean Deployment sy
 ## 🚀 Getting Started
 
 - **[Quick Start Guide](Quick-Start.md)** - Get up and running in minutes
-- **[Installation](Installation.md)** - Detailed installation instructions
-- **[Configuration](Configuration.md)** - Configure your deployment environment
+- **[Configuration Guide](Quick-Start.md#configuration)** - Configure your deployment environment
 
 ## 🎯 Deployment System
 
@@ -16,31 +15,29 @@ Welcome to the complete documentation for the Ansible DigitalOcean Deployment sy
 
 ## 🔧 Advanced Topics
 
-- **[Branch Deployments](Branch-Deployments.md)** - Deploy feature branches for testing
-- **[Rollback System](Rollback-System.md)** - Instant rollbacks to previous releases
-- **[Monitoring & Logging](Monitoring.md)** - Track deployments and troubleshoot issues
+- **[Branch Deployments](Deployment-System.md#branch-deployments)** - Deploy feature branches for testing
+- **[Rollback System](Deployment-System.md#rollbacks)** - Instant rollbacks to previous releases
 
 ## 🔒 Security & Best Practices
 
-- **[Security Guide](Security.md)** - Security considerations and best practices
-- **[Vault Management](Vault-Management.md)** - Encrypt sensitive configuration files
+- **[Security Guide](Private-Repositories.md#security-considerations)** - Security considerations and best practices
+- **[Vault Management](Environment-Management.md#encryption)** - Encrypt sensitive configuration files
 
 ## 🛠️ Troubleshooting
 
-- **[Common Issues](Troubleshooting.md)** - Solutions to common problems
-- **[Docker Troubleshooting](Docker-Troubleshooting.md)** - Docker build and runtime issues
-- **[SSH Key Management](SSH-Keys.md)** - 1Password and traditional SSH key setup
+- **[Common Issues](Quick-Start.md#troubleshooting)** - Solutions to common problems
+- **[Docker Troubleshooting](Deployment-System.md#docker-troubleshooting)** - Docker build and runtime issues
+- **[SSH Key Management](Private-Repositories.md)** - 1Password and traditional SSH key setup
 
 ## 📚 Reference
 
-- **[Architecture Overview](Architecture.md)** - How the system works
-- **[File Structure](File-Structure.md)** - Project organization
-- **[Playbook Reference](Playbook-Reference.md)** - All available playbooks
-- **[Script Reference](Script-Reference.md)** - Helper scripts and utilities
+- **[Architecture Overview](Deployment-System.md#architecture)** - How the system works
+- **[File Structure](Deployment-System.md#file-structure)** - Project organization
+- **[Playbook Reference](Deployment-System.md#playbooks)** - All available playbooks
+- **[Script Reference](Deployment-System.md#scripts)** - Helper scripts and utilities
 
 ## 🤝 Contributing
 
-- **[Development Setup](Development.md)** - Set up development environment
 - **[Contributing Guidelines](Contributing.md)** - How to contribute to the project
 
 ---
@@ -66,15 +63,15 @@ This Ansible project automates the provisioning and configuration of DigitalOcea
 
 ### Most Common Tasks
 
-- [Deploy to production](Deployment-System.md#main-deployments)
-- [Deploy a feature branch](Branch-Deployments.md#feature-branch-testing)
-- [Rollback a deployment](Rollback-System.md#emergency-rollback)
-- [Add a new app](Configuration.md#adding-new-applications)
-- [Troubleshoot build issues](Docker-Troubleshooting.md)
+- [Deploy to production](Deployment-System.md#deployments)
+- [Deploy a feature branch](Deployment-System.md#branch-deployments)
+- [Rollback a deployment](Deployment-System.md#rollbacks)
+- [Add a new app](Quick-Start.md#adding-applications)
+- [Troubleshoot build issues](Deployment-System.md#docker-troubleshooting)
 
 ### Emergency Procedures
 
-- [Emergency rollback](Rollback-System.md#emergency-rollback)
-- [Docker cleanup](Docker-Troubleshooting.md#cleanup-failed-builds)
-- [SSH connection issues](Troubleshooting.md#ssh-connection-issues)
-- [Build failure recovery](Docker-Troubleshooting.md#recovery-options)
+- [Emergency rollback](Deployment-System.md#emergency-rollback)
+- [Docker cleanup](Deployment-System.md#docker-troubleshooting)
+- [SSH connection issues](Quick-Start.md#troubleshooting)
+- [Build failure recovery](Deployment-System.md#docker-troubleshooting)

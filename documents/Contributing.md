@@ -1,289 +1,82 @@
-# Contributing Guidelines
+# Contributing to Ansible DigitalOcean Deployment
 
-Thank you for your interest in contributing to the Ansible DigitalOcean Deployment project! This guide will help you get started with contributing.
+Thank you for your interest in contributing to the Ansible DigitalOcean Deployment project! This document provides guidelines and instructions for contributing.
 
-## 🤝 How to Contribute
+## 🚀 Getting Started
 
-### 1. Fork the Repository
+1. Fork the repository:
 
-```bash
-# Fork this repository to your GitHub account
-# Then clone your fork
-git clone git@github.com:yourusername/robo-ansible.git
-cd robo-ansible
+   ```bash
+   git clone https://github.com/roborew/robo-ansible.git
+   cd robo-ansible
+   git remote add upstream https://github.com/roborew/robo-ansible.git
+   ```
 
-# Add upstream remote
-git remote add upstream https://github.com/roborew/robo-ansible.git
-```
+2. Create a new branch for your feature:
 
-### 2. Set Up Development Environment
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
 
-```bash
-# Run bootstrap to set up development environment
-./scripts/bootstrap.sh
+3. Make your changes and commit them:
 
-# Copy example configurations
-cp .env.example .env
-# Edit .env with test/development values
+   ```bash
+   git commit -m "feat: your feature description"
+   ```
 
-# Set up test vault password
-echo "test-password-123" > .vault_pass
-```
+4. Push your branch and create a pull request:
+   ```bash
+   git push origin feature/your-feature-name
+   ```
 
-### 3. Create Feature Branch
+## 📝 Pull Request Process
 
-```bash
-# Create and checkout a new branch
-git checkout -b feature/your-feature-name
+1. **Update Documentation** - If you add new features, update the relevant documentation in the `documents/` folder.
+2. **Add Tests** - If applicable, add tests for your changes.
+3. **Update README** - If you add new features, update the [README](README.md) accordingly.
+4. **Describe Changes** - Clearly describe the changes in your pull request.
 
-# Make your changes
-# ... edit files ...
-
-# Test your changes
-./scripts/test-changes.sh  # If available
-```
-
-### 4. Submit Pull Request
-
-```bash
-# Commit your changes
-git add .
-git commit -m "Add feature: description of your changes"
-
-# Push to your fork
-git push origin feature/your-feature-name
-
-# Create pull request on GitHub
-```
-
-## 📝 Development Guidelines
+## 🎯 Development Guidelines
 
 ### Code Style
 
-- **Ansible YAML**: Follow standard YAML formatting (2 spaces, no tabs)
-- **Shell Scripts**: Use bash with error handling (`set -e`)
-- **Documentation**: Update documentation for any new features
-- **Comments**: Comment complex logic and non-obvious decisions
-
-### Ansible Best Practices
-
-```yaml
-# Use descriptive task names
-- name: "Install Docker CE and configure daemon"
-  apt:
-    name: docker-ce
-    state: present
-
-# Always use when conditions for clarity
-- name: "Create application directories"
-  file:
-    path: "/opt/{{ app.name }}"
-    state: directory
-  when: app.name is defined
-
-# Use proper variable scoping
-vars:
-  app_name: "{{ app.name | default('unknown') }}"
-```
-
-### Documentation Standards
-
-- **Wiki-style**: All detailed docs go in `documents/` folder
-- **Clear headings**: Use consistent emoji and heading structure
-- **Code examples**: Include working code examples
-- **Cross-references**: Link to related documentation pages
-
-## 🧪 Testing
-
-### Local Testing
-
-```bash
-# Test with a development droplet
-cp .env.example .env.dev
-# Edit .env.dev with test credentials
-
-# Test provisioning
-ansible-playbook playbooks/provision-droplet.yml -e @.env.dev
-
-# Test deployment
-ansible-playbook playbooks/deploy-stack.yml -e @.env.dev
-
-# Clean up test resources
-ansible-playbook playbooks/destroy-droplet.yml -e @.env.dev
-```
-
-### Validation Checklist
-
-Before submitting a PR, ensure:
-
-- [ ] All playbooks run without errors
-- [ ] Documentation is updated
-- [ ] No sensitive data in commits
-- [ ] Vault files are properly encrypted
-- [ ] Scripts have proper permissions
-- [ ] Code follows established patterns
-
-## 📂 Project Structure
-
-Understanding the project structure helps with contributions:
-
-```
-robo-ansible/
-├── ansible.cfg              # Ansible configuration
-├── .env.example             # Environment template
-├── playbooks/               # Main playbooks
-│   ├── provision-*.yml      # Server provisioning
-│   ├── configure-*.yml      # Server configuration
-│   ├── deploy-*.yml         # Application deployment
-│   └── manage-*.yml         # Management tasks
-├── roles/                   # Ansible roles
-│   ├── caddy_proxy/         # Reverse proxy setup
-│   ├── deploy_apps/         # Application deployment
-│   └── deploy_ssh_keys/     # SSH key management
-├── scripts/                 # Helper scripts
-├── templates/               # Configuration templates
-├── group_vars/              # Variable files
-├── inventory/               # Server inventories
-├── documents/               # Wiki documentation
-└── files/                   # Static files and keys
-```
-
-## 🎯 Contribution Areas
-
-### High Priority
-
-- **Improved error handling** - Better error messages and recovery
-- **Additional cloud providers** - Support for AWS, GCP, etc.
-- **Database management** - Automated database backups and migrations
-- **Monitoring integration** - Prometheus, Grafana, or similar
-- **CI/CD integration** - GitHub Actions, GitLab CI templates
-
-### Medium Priority
-
-- **Additional deployment strategies** - Blue-green, canary deployments
-- **Container registry support** - Private Docker registries
-- **Load balancing** - Multi-server deployments
-- **Security hardening** - Additional security measures
-- **Performance optimization** - Faster deployments, caching
+- Follow the existing code style in the project.
+- Use meaningful variable and function names.
+- Add comments for complex logic.
 
 ### Documentation
 
-- **Video tutorials** - Walkthrough videos for complex setups
-- **Use case examples** - Real-world deployment examples
-- **Troubleshooting guides** - Common issues and solutions
-- **Architecture diagrams** - Visual system documentation
-- **Best practices** - Production deployment guidelines
+- Update the relevant documentation in the `documents/` folder.
+- Use clear, concise language.
+- Include examples where helpful.
 
-## 🐛 Bug Reports
+### Testing
 
-### Before Reporting
+- Test your changes thoroughly.
+- If you add new features, add tests if applicable.
 
-1. **Check existing issues** - Search for similar issues
-2. **Test with clean environment** - Reproduce with fresh setup
-3. **Check documentation** - Ensure it's not a configuration issue
+## 🤝 Community
 
-### Bug Report Format
+- Join our [GitHub Discussions](https://github.com/roborew/robo-ansible/discussions) to ask questions or share ideas.
+- Report bugs or suggest features via [GitHub Issues](https://github.com/roborew/robo-ansible/issues).
 
-```markdown
-## Bug Description
+## 📚 Additional Resources
 
-Brief description of the issue
+- [Quick Start Guide](Quick-Start.md) - Get up and running quickly
+- [Deployment System](Deployment-System.md) - Learn about the deployment system
+- [Environment Management](Environment-Management.md) - Manage environment variables
+- [Private Repositories](Private-Repositories.md) - Deploy from private GitHub repositories
 
-## Environment
+## 🔒 Security
 
-- OS: macOS/Ubuntu/etc
-- Ansible version: X.X.X
-- Python version: X.X.X
+- **Do not** commit sensitive information (API keys, passwords, etc.).
+- Use [Environment Management](Environment-Management.md#encryption) for sensitive data.
+- Report security vulnerabilities privately via [GitHub Security](https://github.com/roborew/robo-ansible/security).
 
-## Steps to Reproduce
+## 📄 License
 
-1. Step one
-2. Step two
-3. Step three
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Expected Behavior
+---
 
-What should happen
-
-## Actual Behavior
-
-What actually happens
-
-## Logs/Output
-```
-
-Paste relevant error messages or logs
-
-```
-
-## Additional Context
-Any other relevant information
-```
-
-## 🚀 Feature Requests
-
-### Feature Request Format
-
-```markdown
-## Feature Description
-
-Clear description of the proposed feature
-
-## Use Case
-
-Why is this feature needed? What problem does it solve?
-
-## Proposed Implementation
-
-How should this feature work?
-
-## Alternatives Considered
-
-Other approaches that were considered
-
-## Additional Context
-
-Any other relevant information
-```
-
-## 📋 Release Process
-
-### Version Management
-
-- **Semantic versioning** - MAJOR.MINOR.PATCH
-- **Git tags** - Tag releases with version numbers
-- **Changelog** - Update CHANGELOG.md with each release
-
-### Release Checklist
-
-- [ ] All tests pass
-- [ ] Documentation updated
-- [ ] Version bumped
-- [ ] Changelog updated
-- [ ] Git tag created
-- [ ] Release notes written
-
-## 💬 Community
-
-### Communication Channels
-
-- **GitHub Issues** - Bug reports and feature requests
-- **GitHub Discussions** - General questions and community chat
-- **Pull Requests** - Code contributions and reviews
-
-### Code of Conduct
-
-- **Be respectful** - Treat all community members with respect
-- **Be constructive** - Provide helpful feedback and suggestions
-- **Be patient** - Remember that maintainers are volunteers
-- **Be inclusive** - Welcome newcomers and different perspectives
-
-## 🙏 Recognition
-
-Contributors will be recognized in:
-
-- **README credits** - Listed in the main README
-- **Release notes** - Mentioned in release announcements
-- **GitHub contributors** - Shown in repository statistics
-
-Thank you for contributing to make this project better for everyone! 🎉
+Thank you for contributing! 🎉

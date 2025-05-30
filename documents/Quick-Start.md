@@ -1,156 +1,93 @@
 # Quick Start Guide
 
-Get your Ansible DigitalOcean deployment system up and running in minutes!
+This guide will help you get up and running with the Ansible DigitalOcean Deployment system in minutes.
 
-## Prerequisites
+## 🚀 Prerequisites
 
-### Required
+- **DigitalOcean Account** - With an API token
+- **SSH Key** - Either a traditional SSH key or 1Password SSH key
+- **macOS** (with Homebrew) or **Ubuntu** (with Python 3)
 
-- DigitalOcean account with API token
-- SSH key (either in 1Password or traditional ~/.ssh/ keys)
+## 🎯 Quick Start
 
-### Platform-Specific
-
-- **macOS**: Homebrew (for Ansible installation)
-- **Ubuntu**: Python 3 and pip3 (for Ansible installation)
-
-## 🚀 New User Setup
-
-### 1. Bootstrap (one-time setup)
+### 1. Clone and Bootstrap
 
 ```bash
+# Clone the repository
 git clone https://github.com/roborew/robo-ansible.git
 cd robo-ansible
+
+# Run the bootstrap script
 ./scripts/bootstrap.sh
 ```
 
-The bootstrap script will:
-
-- Install Ansible and required collections
-- Create configuration template files
-- Set up vault password for encryption
-- Validate your environment
-
-### 2. Configure (edit your settings)
+### 2. Configure Your Settings
 
 ```bash
-# Add your DigitalOcean API token and SSH keys
+# Copy the example environment file
+cp .env.example .env
+
+# Edit the environment file with your settings
 nano .env
-
-# Configure your applications and server settings
-nano group_vars/prod.yml
 ```
 
-**Essential .env variables:**
+**Required Settings:**
 
-```bash
-DO_API_TOKEN=your_digitalocean_api_token
-DO_SSH_KEYS=your-ssh-key-name
-SERVER_USERNAME=your_username
-ROOT_PASSWORD=secure_password_123
-```
+- `DO_API_TOKEN` - Your DigitalOcean API token
+- `SSH_KEY_PATH` - Path to your SSH key (or 1Password SSH key)
+- `SSH_KEY_PASSPHRASE` (optional) - Passphrase for your SSH key
 
-**Essential app configuration in group_vars/prod.yml:**
+### 3. Add Your Applications
+
+Edit `group_vars/prod.yml` to add your applications:
 
 ```yaml
-apps:
-  - name: "myapp"
-    repo: "https://github.com/yourusername/myapp.git"
-    branch: "main"
-    hostname: "myapp.yourdomain.com"
-    port: "3000"
+applications:
+  - name: myapp
+    repo: https://github.com/yourusername/myapp.git
+    branch: main
+    hostname: myapp.example.com
+    port: 3000
 ```
 
-### 3. Setup Environment Files (for your applications)
+### 4. Deploy Everything
 
 ```bash
-# Generate deploy keys for private repositories (if needed)
-./scripts/setup-deploy-keys.sh
-
-# Manually add the displayed public keys to your GitHub repositories:
-# Go to: github.com/username/repo → Settings → Deploy keys → Add deploy key
-# Paste the public key and optionally enable "Allow write access"
-
-# Create environment file templates for each app
-ansible-playbook playbooks/manage-env.yml -e action=create -e app_name=myapp
-
-# Edit the environment files
-./scripts/manage-env.sh edit myapp
-
-# Encrypt them for security
-ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name=myapp
-```
-
-### 4. Deploy (with automatic validation & encryption)
-
-```bash
-# Provision server and deploy everything
+# Provision and configure the server
 ansible-playbook playbooks/provision-and-configure.yml
+
+# Deploy your applications
 ansible-playbook playbooks/deploy-stack.yml
-
-# SSH keys for private repos are automatically deployed and detected
-# No manual parameters needed!
 ```
 
-## 🔄 Returning User Workflow
+## 🔧 Configuration
 
-For subsequent deployments, it's just one command:
+### Environment Variables
 
-```bash
-ansible-playbook playbooks/deploy.yml
-```
+The `.env` file contains all your configuration settings. See [Environment Management](Environment-Management.md) for details.
 
-## ✨ What Happens During Setup
+### Applications
 
-**Bootstrap script handles:**
+Each application in `group_vars/prod.yml` requires:
 
-- Ansible installation (via Homebrew on macOS, pip on Ubuntu)
-- Required Ansible collections (community.digitalocean, etc.)
-- Configuration file creation from templates
-- Vault password setup for encryption
-- Environment validation
+- `name` - A unique name for your app
+- `repo` - Git repository URL
+- `branch` - Branch to deploy (defaults to `main`)
+- `hostname` - Domain name for your app
+- `port` - Port your app listens on
 
-**Configuration validation includes:**
+See [Deployment System](Deployment-System.md) for advanced configuration options.
 
-- Environment variables loaded from `.env` file
-- Configuration files validated and encrypted automatically
-- App environment files checked and validated
-- SSH keys and DigitalOcean API tested before deployment
-- System readiness verified before any deployment tasks run
+## 🐳 Docker Support
 
-## 🎯 Verification
+Your applications should include a `docker-compose.yml` file. The system automatically:
 
-After setup, verify everything is working:
+- Builds Docker images
+- Runs containers
+- Sets up a reverse proxy
+- Configures automatic HTTPS
 
-```bash
-# Test your DigitalOcean API connection
-ansible-playbook playbooks/test-do-api.yml
-
-# Test deployment system
-ansible-playbook playbooks/test-deployment.yml
-
-# Check your app status
-ansible digitalocean -m shell -a "cd /opt/myapp/current && docker compose ps"
-```
-
-## 🔗 Next Steps
-
-Once you have the basic setup working:
-
-- **[Deploy a feature branch](Branch-Deployments.md)** - Test new features safely
-- **[Add more applications](Configuration.md#adding-new-applications)** - Deploy multiple apps
-- **[Set up monitoring](Monitoring.md)** - Track your deployments
-- **[Configure rollbacks](Rollback-System.md)** - Prepare for emergency rollbacks
-
-## 🆘 Need Help?
-
-- **[Common Issues](Troubleshooting.md)** - Solutions to common problems
-- **[Docker Issues](Docker-Troubleshooting.md)** - Build and runtime problems
-- **[SSH Problems](SSH-Keys.md)** - SSH key setup and connectivity
-
-## 🔧 Example App Requirements
-
-Your application repository needs a `docker-compose.yml` file with:
+Example `docker-compose.yml`:
 
 ```yaml
 services:
@@ -168,4 +105,46 @@ networks:
     name: ${PROXY_NETWORK:-proxy}
 ```
 
-See the complete [Application Requirements](Deployment-System.md#application-requirements) for details.
+## 🔄 Daily Usage
+
+### Deploy Latest Changes
+
+```bash
+ansible-playbook playbooks/deploy.yml
+```
+
+### Deploy Feature Branch
+
+```bash
+ansible-playbook playbooks/deploy.yml -e mode=branch -e branch=new-feature
+```
+
+### Emergency Rollback
+
+```bash
+ansible-playbook playbooks/deploy.yml -e mode=rollback
+```
+
+## 🛠️ Troubleshooting
+
+### Common Issues
+
+- **SSH Connection Issues** - See [Private Repositories](Private-Repositories.md) for SSH key setup
+- **Docker Build Failures** - See [Deployment System](Deployment-System.md#docker-troubleshooting)
+- **Deployment Errors** - Check the deployment logs in `/opt/<app>/shared/logs/`
+
+### Getting Help
+
+- [GitHub Issues](https://github.com/roborew/robo-ansible/issues) - Report bugs or request features
+- [GitHub Discussions](https://github.com/roborew/robo-ansible/discussions) - Ask questions or share ideas
+
+## 📚 Next Steps
+
+- [Deployment System](Deployment-System.md) - Learn about the deployment system
+- [Environment Management](Environment-Management.md) - Manage environment variables
+- [Private Repositories](Private-Repositories.md) - Deploy from private GitHub repositories
+- [Contributing](Contributing.md) - How to contribute to the project
+
+---
+
+**[🚀 Back to Home](Home.md)** | **[📚 Full Documentation](Home.md)**
