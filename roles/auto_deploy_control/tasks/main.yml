@@ -1,0 +1,123 @@
+---
+- name: "🎛️ Auto-Deployment Control Node Setup"
+  debug:
+    msg: "Setting up auto-deployment webhook service on control node..."
+
+- name: Skip auto-deployment setup if disabled
+  debug:
+    msg: "Auto-deployment is disabled in configuration"
+  when: not auto_deploy_enabled
+
+- name: Setup auto-deployment service on control node
+  block:
+    - name: Ensure auto-deployment directories exist
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ auto_deploy_service_dir }}"
+        - "{{ auto_deploy_log_dir }}"
+
+    - name: Check if Python 3 is available
+      command: python3 --version
+      register: python3_check
+      failed_when: false
+      changed_when: false
+
+    - name: Fail if Python 3 is not available
+      fail:
+        msg: |
+          Python 3 is required for the webhook service.
+          Please install Python 3 on this control node.
+      when: python3_check.rc != 0
+
+    - name: Create Python virtual environment
+      command: python3 -m venv "{{ webhook_python_env }}"
+      args:
+        creates: "{{ webhook_python_env }}/bin/activate"
+
+    - name: Install Python requirements in virtual environment
+      pip:
+        name: "{{ python_requirements }}"
+        virtualenv: "{{ webhook_python_env }}"
+        virtualenv_command: python3 -m venv
+
+    - name: Create webhook application for control node
+      template:
+        src: webhook_control.py.j2
+        dest: "{{ auto_deploy_service_dir }}/webhook_control.py"
+        mode: "0755"
+
+    - name: Create deployment configuration
+      template:
+        src: deploy_config.yml.j2
+        dest: "{{ auto_deploy_service_dir }}/deploy_config.yml"
+        mode: "0600"
+
+    - name: Create systemd service file (Linux)
+      template:
+        src: auto-deploy-webhook.service.j2
+        dest: "{{ auto_deploy_service_dir }}/auto-deploy-webhook.service"
+        mode: "0644"
+      when: ansible_system == "Linux"
+
+    - name: Create launchd service file (macOS)
+      template:
+        src: com.auto-deploy.webhook.plist.j2
+        dest: "{{ auto_deploy_service_dir }}/com.auto-deploy.webhook.plist"
+        mode: "0644"
+      when: ansible_system == "Darwin"
+
+    - name: Create start/stop scripts
+      template:
+        src: "{{ item }}.j2"
+        dest: "{{ auto_deploy_service_dir }}/{{ item }}"
+        mode: "0755"
+      loop:
+        - start-webhook.sh
+        - stop-webhook.sh
+        - restart-webhook.sh
+
+    - name: Test webhook service configuration
+      command: "{{ webhook_python_env }}/bin/python {{ auto_deploy_service_dir }}/webhook_control.py --test-config"
+      register: config_test
+      changed_when: false
+
+    - name: Display auto-deployment setup summary
+      debug:
+        msg: |
+          🎛️ Auto-Deployment Control Node Ready!
+
+          📁 Service Directory: {{ auto_deploy_service_dir }}
+          📝 Logs Directory: {{ auto_deploy_log_dir }}
+          🐍 Python Environment: {{ webhook_python_env }}
+          📡 Webhook Port: {{ auto_deploy_webhook_port }}
+
+          📋 Configured Apps:
+          {% for app in apps %}
+          {% if app.auto_deploy.enabled | default(false) %}
+          - {{ app.name }}:
+          {% for branch in app.auto_deploy.branches %}
+            - {{ branch.name }} → {{ branch.hostname }} ({{ branch.environment }})
+          {% endfor %}
+          {% endif %}
+          {% endfor %}
+
+          🔧 Management Commands:
+          # Start webhook service
+          {{ auto_deploy_service_dir }}/start-webhook.sh
+
+          # Stop webhook service  
+          {{ auto_deploy_service_dir }}/stop-webhook.sh
+
+          # Restart webhook service
+          {{ auto_deploy_service_dir }}/restart-webhook.sh
+
+          # View logs
+          tail -f {{ auto_deploy_log_dir }}/webhook.log
+
+          📡 Webhook Endpoint: http://{{ ansible_default_ipv4.address | default('localhost') }}:{{ auto_deploy_webhook_port }}{{ auto_deploy_webhook_path }}
+          🔐 Webhook Secret: {{ auto_deploy_webhook_secret }}
+
+  when: auto_deploy_enabled

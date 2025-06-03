@@ -1,0 +1,35 @@
+---
+# Auto-deployment for control node (Mac Mini, separate droplet, etc.)
+# This runs Ansible to deploy to remote target servers
+
+# Global auto-deployment settings
+auto_deploy_enabled: "{{ auto_deploy.enabled | default(false) }}"
+auto_deploy_webhook_port: "{{ auto_deploy.webhook_port | default(9000) }}"
+auto_deploy_webhook_secret: "{{ auto_deploy.webhook_secret | default('change-me') }}"
+auto_deploy_webhook_path: "{{ auto_deploy.webhook_path | default('/webhook') }}"
+auto_deploy_delay: "{{ auto_deploy.deploy_delay | default(30) }}"
+auto_deploy_max_concurrent: "{{ auto_deploy.max_concurrent_deploys | default(2) }}"
+auto_deploy_notification_email: "{{ auto_deploy.notification_email | default('') }}"
+
+# Control node configuration
+control_node_user: "{{ ansible_user | default(lookup('env', 'USER')) }}"
+control_node_home: "{{ ansible_env.HOME | default('/Users/' + control_node_user) }}"
+auto_deploy_service_dir: "{{ control_node_home }}/auto-deploy"
+auto_deploy_log_dir: "{{ control_node_home }}/auto-deploy/logs"
+ansible_project_dir: "{{ playbook_dir | dirname }}"
+
+# Webhook service configuration
+webhook_service_name: "auto-deploy-webhook"
+webhook_python_env: "{{ auto_deploy_service_dir }}/venv"
+
+# Python requirements for webhook service
+python_requirements:
+  - "flask==2.3.3"
+  - "gunicorn==21.2.0"
+  - "requests==2.31.0"
+  - "pyyaml==6.0.1"
+
+# Ansible execution settings
+ansible_executable: "{{ ansible_playbook_path | default('ansible-playbook') }}"
+ansible_inventory: "{{ ansible_project_dir }}/inventory/hosts.yml"
+ansible_config: "{{ ansible_project_dir }}/ansible.cfg"

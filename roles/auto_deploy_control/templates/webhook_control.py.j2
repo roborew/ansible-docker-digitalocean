@@ -1,0 +1,456 @@
+#!/usr/bin/env python3
+"""
+Auto-Deployment Webhook Service for Control Node
+Handles GitHub/GitLab webhooks and triggers Ansible deployments to remote target servers
+"""
+
+import os
+import sys
+import json
+import yaml
+import hmac
+import hashlib
+import subprocess
+import threading
+import time
+import signal
+import argparse
+from datetime import datetime
+from pathlib import Path
+from flask import Flask, request, jsonify
+import logging
+from logging.handlers import RotatingFileHandler
+
+app = Flask(__name__)
+
+# Configuration
+CONFIG_FILE = '{{ auto_deploy_service_dir }}/deploy_config.yml'
+LOG_DIR = '{{ auto_deploy_log_dir }}'
+WEBHOOK_SECRET = '{{ auto_deploy_webhook_secret }}'
+DEPLOY_DELAY = {{ auto_deploy_delay }}
+MAX_CONCURRENT = {{ auto_deploy_max_concurrent }}
+ANSIBLE_PROJECT_DIR = '{{ ansible_project_dir }}'
+ANSIBLE_EXECUTABLE = '{{ ansible_executable }}'
+ANSIBLE_INVENTORY = '{{ ansible_inventory }}'
+
+# Global state
+active_deployments = {}
+deployment_lock = threading.Lock()
+shutdown_flag = threading.Event()
+
+# Setup logging
+log_file = f'{LOG_DIR}/webhook.log'
+os.makedirs(LOG_DIR, exist_ok=True)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+# File handler for webhook logs
+file_handler = RotatingFileHandler(
+    log_file, 
+    maxBytes=10*1024*1024,  # 10MB
+    backupCount=5
+)
+file_handler.setFormatter(logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+))
+app.logger.addHandler(file_handler)
+app.logger.setLevel(logging.INFO)
+
+def load_config():
+    """Load deployment configuration"""
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            return yaml.safe_load(f)
+    except Exception as e:
+        app.logger.error(f"Failed to load config: {e}")
+        return None
+
+def verify_signature(payload_body, signature_header):
+    """Verify GitHub webhook signature"""
+    if not signature_header:
+        return False
+    
+    try:
+        sha_name, signature = signature_header.split('=')
+        if sha_name != 'sha256':
+            return False
+            
+        mac = hmac.new(
+            WEBHOOK_SECRET.encode('utf-8'),
+            payload_body,
+            digestmod=hashlib.sha256
+        )
+        
+        return hmac.compare_digest(mac.hexdigest(), signature)
+    except Exception as e:
+        app.logger.error(f"Signature verification error: {e}")
+        return False
+
+def extract_push_info(payload):
+    """Extract repository and branch info from webhook payload"""
+    try:
+        # GitHub format
+        if 'repository' in payload and 'ref' in payload:
+            repo_url = payload['repository']['clone_url']
+            repo_name = payload['repository']['name']
+            branch = payload['ref'].replace('refs/heads/', '')
+            commit_sha = payload['after']
+            commit_message = payload['head_commit']['message'] if payload.get('head_commit') else 'No message'
+            pusher = payload['pusher']['name'] if payload.get('pusher') else 'Unknown'
+            
+            return {
+                'repo_url': repo_url,
+                'repo_name': repo_name,
+                'branch': branch,
+                'commit_sha': commit_sha,
+                'commit_message': commit_message,
+                'pusher': pusher,
+                'provider': 'github'
+            }
+        
+        # GitLab format
+        elif 'project' in payload and 'ref' in payload:
+            repo_url = payload['project']['http_url_to_repo']
+            repo_name = payload['project']['name']
+            branch = payload['ref'].replace('refs/heads/', '')
+            commit_sha = payload['after']
+            commit_message = payload['commits'][0]['message'] if payload.get('commits') else 'No message'
+            pusher = payload['user_name'] if payload.get('user_name') else 'Unknown'
+            
+            return {
+                'repo_url': repo_url,
+                'repo_name': repo_name,
+                'branch': branch,
+                'commit_sha': commit_sha,
+                'commit_message': commit_message,
+                'pusher': pusher,
+                'provider': 'gitlab'
+            }
+            
+    except Exception as e:
+        app.logger.error(f"Failed to extract push info: {e}")
+        return None
+
+def find_matching_app(config, push_info):
+    """Find app configuration that matches the push"""
+    if not config or 'apps' not in config:
+        return None
+    
+    for app in config['apps']:
+        if not app.get('auto_deploy', {}).get('enabled', False):
+            continue
+            
+        # Check if repository matches
+        app_repo = app['repo'].lower()
+        push_repo = push_info['repo_url'].lower()
+        
+        # Handle different URL formats (https vs git)
+        if app_repo.endswith('.git'):
+            app_repo = app_repo[:-4]
+        if push_repo.endswith('.git'):
+            push_repo = push_repo[:-4]
+            
+        # Normalize URLs for comparison
+        app_repo_normalized = app_repo.replace('https://', '').replace('git@', '').replace('github.com:', 'github.com/')
+        push_repo_normalized = push_repo.replace('https://', '').replace('git@', '').replace('github.com:', 'github.com/')
+        
+        if app_repo_normalized != push_repo_normalized:
+            continue
+            
+        # Check if branch is configured for auto-deploy
+        auto_deploy_config = app.get('auto_deploy', {})
+        for branch_config in auto_deploy_config.get('branches', []):
+            if branch_config['name'] == push_info['branch']:
+                return {
+                    'app': app,
+                    'branch_config': branch_config,
+                    'push_info': push_info
+                }
+    
+    return None
+
+def deploy_app(app_name, branch, environment, push_info):
+    """Execute deployment using Ansible from control node"""
+    deployment_id = f"{app_name}-{branch}-{int(time.time())}"
+    
+    try:
+        with deployment_lock:
+            active_deployments[deployment_id] = {
+                'app': app_name,
+                'branch': branch,
+                'environment': environment,
+                'started': datetime.now().isoformat(),
+                'status': 'running',
+                'push_info': push_info
+            }
+        
+        app.logger.info(f"Starting deployment: {deployment_id}")
+        app.logger.info(f"Deploying {app_name} branch '{branch}' to {environment}")
+        app.logger.info(f"Commit: {push_info['commit_sha'][:8]} by {push_info['pusher']}")
+        app.logger.info(f"Message: {push_info['commit_message']}")
+        
+        # Create deployment log file
+        deploy_log = f"{LOG_DIR}/deploy_{deployment_id}.log"
+        
+        # Prepare Ansible command to run against remote target servers
+        ansible_cmd = [
+            ANSIBLE_EXECUTABLE,
+            f'{ANSIBLE_PROJECT_DIR}/playbooks/deploy.yml',
+            '-i', ANSIBLE_INVENTORY,
+            '-e', f'mode=branch',
+            '-e', f'branch={branch}',
+            '-e', f'app={app_name}',
+            '-e', f'deploy_environment={environment}',
+            '-e', f'auto_deploy=true',
+            '-e', f'deployment_id={deployment_id}'
+        ]
+        
+        # Add ansible config if exists
+        ansible_cfg = f'{ANSIBLE_PROJECT_DIR}/ansible.cfg'
+        if os.path.exists(ansible_cfg):
+            env = os.environ.copy()
+            env['ANSIBLE_CONFIG'] = ansible_cfg
+        else:
+            env = os.environ.copy()
+        
+        app.logger.info(f"Running: {' '.join(ansible_cmd)}")
+        app.logger.info(f"Working directory: {ANSIBLE_PROJECT_DIR}")
+        
+        # Execute Ansible deployment
+        with open(deploy_log, 'w') as log_file:
+            result = subprocess.run(
+                ansible_cmd,
+                cwd=ANSIBLE_PROJECT_DIR,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=1800,  # 30 minutes timeout
+                env=env
+            )
+        
+        # Read deployment output
+        with open(deploy_log, 'r') as log_file:
+            deploy_output = log_file.read()
+        
+        # Update deployment status
+        with deployment_lock:
+            if deployment_id in active_deployments:
+                active_deployments[deployment_id].update({
+                    'status': 'success' if result.returncode == 0 else 'failed',
+                    'completed': datetime.now().isoformat(),
+                    'exit_code': result.returncode,
+                    'log_file': deploy_log,
+                    'output': deploy_output[-1000:] if deploy_output else ''  # Last 1000 chars
+                })
+        
+        if result.returncode == 0:
+            app.logger.info(f"Deployment successful: {deployment_id}")
+        else:
+            app.logger.error(f"Deployment failed: {deployment_id}")
+            app.logger.error(f"Check log: {deploy_log}")
+            
+    except subprocess.TimeoutExpired:
+        app.logger.error(f"Deployment timeout: {deployment_id}")
+        with deployment_lock:
+            if deployment_id in active_deployments:
+                active_deployments[deployment_id].update({
+                    'status': 'timeout',
+                    'completed': datetime.now().isoformat()
+                })
+    except Exception as e:
+        app.logger.error(f"Deployment error: {deployment_id} - {e}")
+        with deployment_lock:
+            if deployment_id in active_deployments:
+                active_deployments[deployment_id].update({
+                    'status': 'error',
+                    'completed': datetime.now().isoformat(),
+                    'error': str(e)
+                })
+    finally:
+        # Clean up old deployment records (keep last 20)
+        with deployment_lock:
+            if len(active_deployments) > 20:
+                oldest_keys = sorted(active_deployments.keys())[:len(active_deployments) - 20]
+                for key in oldest_keys:
+                    del active_deployments[key]
+
+def schedule_deployment(match_data):
+    """Schedule deployment with delay to batch multiple commits"""
+    def delayed_deploy():
+        if shutdown_flag.wait(DEPLOY_DELAY):
+            app.logger.info("Shutdown requested, cancelling scheduled deployment")
+            return
+        
+        app_name = match_data['app']['name']
+        branch = match_data['branch_config']['name']
+        environment = match_data['branch_config']['environment']
+        push_info = match_data['push_info']
+        
+        # Check if we're under the concurrent deployment limit
+        running_deployments = sum(1 for d in active_deployments.values() if d['status'] == 'running')
+        if running_deployments >= MAX_CONCURRENT:
+            app.logger.warning(f"Max concurrent deployments reached, skipping {app_name}")
+            return
+        
+        deploy_app(app_name, branch, environment, push_info)
+    
+    thread = threading.Thread(target=delayed_deploy)
+    thread.daemon = True
+    thread.start()
+
+@app.route('/health')
+def health():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.now().isoformat(),
+        'active_deployments': len([d for d in active_deployments.values() if d['status'] == 'running']),
+        'control_node': True,
+        'ansible_project': ANSIBLE_PROJECT_DIR
+    })
+
+@app.route('{{ auto_deploy_webhook_path }}', methods=['POST'])
+def webhook():
+    """Main webhook endpoint"""
+    try:
+        # Verify signature
+        signature = request.headers.get('X-Hub-Signature-256') or request.headers.get('X-GitLab-Token')
+        if not verify_signature(request.data, signature):
+            app.logger.warning(f"Invalid webhook signature from {request.remote_addr}")
+            return jsonify({'error': 'Invalid signature'}), 401
+        
+        # Parse payload
+        payload = request.get_json()
+        if not payload:
+            return jsonify({'error': 'Invalid JSON payload'}), 400
+        
+        # Extract push information
+        push_info = extract_push_info(payload)
+        if not push_info:
+            return jsonify({'error': 'Unable to extract push information'}), 400
+        
+        app.logger.info(f"Received push for {push_info['repo_name']}:{push_info['branch']} from {push_info['pusher']}")
+        
+        # Load current configuration
+        config = load_config()
+        if not config:
+            return jsonify({'error': 'Configuration not available'}), 500
+        
+        # Find matching app configuration
+        match_data = find_matching_app(config, push_info)
+        if not match_data:
+            app.logger.info(f"No auto-deploy configuration found for {push_info['repo_name']}:{push_info['branch']}")
+            return jsonify({'message': 'No matching auto-deploy configuration'}), 200
+        
+        # Schedule deployment
+        schedule_deployment(match_data)
+        
+        return jsonify({
+            'message': 'Deployment scheduled',
+            'app': match_data['app']['name'],
+            'branch': push_info['branch'],
+            'environment': match_data['branch_config']['environment'],
+            'delay': DEPLOY_DELAY
+        }), 200
+        
+    except Exception as e:
+        app.logger.error(f"Webhook error: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/deployments')
+def deployments():
+    """Get deployment status"""
+    return jsonify({
+        'active_deployments': active_deployments,
+        'total_deployments': len(active_deployments)
+    })
+
+@app.route('/config')
+def config():
+    """Get current configuration (for debugging)"""
+    config = load_config()
+    if config:
+        # Remove sensitive information
+        safe_config = config.copy()
+        if 'auto_deploy' in safe_config:
+            safe_config['auto_deploy'].pop('webhook_secret', None)
+        return jsonify(safe_config)
+    else:
+        return jsonify({'error': 'Configuration not available'}), 500
+
+def test_config():
+    """Test configuration and dependencies"""
+    print("🧪 Testing Auto-Deployment Configuration")
+    print("=" * 50)
+    
+    # Test configuration file
+    config = load_config()
+    if config:
+        print("✅ Configuration file loaded successfully")
+        print(f"   Apps configured: {len(config.get('apps', []))}")
+        auto_deploy_apps = [app for app in config.get('apps', []) if app.get('auto_deploy', {}).get('enabled', False)]
+        print(f"   Auto-deploy enabled: {len(auto_deploy_apps)}")
+    else:
+        print("❌ Configuration file could not be loaded")
+        return False
+    
+    # Test Ansible executable
+    try:
+        result = subprocess.run([ANSIBLE_EXECUTABLE, '--version'], capture_output=True, text=True)
+        if result.returncode == 0:
+            print("✅ Ansible executable found")
+            print(f"   Path: {ANSIBLE_EXECUTABLE}")
+        else:
+            print("❌ Ansible executable not working")
+            return False
+    except FileNotFoundError:
+        print("❌ Ansible executable not found")
+        return False
+    
+    # Test inventory file
+    if os.path.exists(ANSIBLE_INVENTORY):
+        print("✅ Ansible inventory file found")
+        print(f"   Path: {ANSIBLE_INVENTORY}")
+    else:
+        print("❌ Ansible inventory file not found")
+        return False
+    
+    # Test project directory
+    if os.path.exists(ANSIBLE_PROJECT_DIR):
+        print("✅ Ansible project directory found")
+        print(f"   Path: {ANSIBLE_PROJECT_DIR}")
+    else:
+        print("❌ Ansible project directory not found")
+        return False
+    
+    print("\n🎉 Configuration test passed!")
+    return True
+
+def signal_handler(signum, frame):
+    """Handle shutdown signals"""
+    app.logger.info("Received shutdown signal, stopping webhook service...")
+    shutdown_flag.set()
+    sys.exit(0)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Auto-deployment webhook service')
+    parser.add_argument('--test-config', action='store_true', help='Test configuration and exit')
+    parser.add_argument('--port', type=int, default={{ auto_deploy_webhook_port }}, help='Port to run webhook service')
+    args = parser.parse_args()
+    
+    if args.test_config:
+        sys.exit(0 if test_config() else 1)
+    
+    # Setup signal handlers
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    print(f"🎛️ Starting Auto-Deployment Webhook Service on port {args.port}")
+    print(f"📁 Project Directory: {ANSIBLE_PROJECT_DIR}")
+    print(f"📋 Configuration: {CONFIG_FILE}")
+    print(f"📝 Logs: {LOG_DIR}")
+    
+    app.run(host='0.0.0.0', port=args.port, debug=False) 

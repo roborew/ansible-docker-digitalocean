@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Restart Auto-Deployment Webhook Service
+
+set -e
+
+SCRIPT_DIR="{{ auto_deploy_service_dir }}"
+
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+echo -e "🔄 ${YELLOW}Restarting Auto-Deployment Webhook Service${NC}"
+
+# Stop service
+"$SCRIPT_DIR/stop-webhook.sh"
+
+# Wait a moment
+sleep 1
+
+# Start service
+"$SCRIPT_DIR/start-webhook.sh"
+
+echo -e "${GREEN}✅ Service restarted successfully${NC}" 

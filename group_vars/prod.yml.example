@@ -10,6 +10,19 @@ apps:
     branch: "main"
     hostname: "app.example.com"
     port: "3000"
+    # Auto-deployment configuration (optional)
+    auto_deploy:
+      enabled: true
+      branches:
+        - name: "main"
+          hostname: "app.example.com"
+          environment: "production"
+        - name: "staging"
+          hostname: "staging-app.example.com"
+          environment: "staging"
+        - name: "test"
+          hostname: "test-app.example.com"
+          environment: "test"
     
   # Additional app examples:
   # - name: "api-service"
@@ -17,11 +30,32 @@ apps:
   #   branch: "production"
   #   hostname: "api.example.com"
   #   port: "8080"
+  #   auto_deploy:
+  #     enabled: true
+  #     branches:
+  #       - name: "production"
+  #         hostname: "api.example.com"
+  #         environment: "production"
+  #       - name: "develop"
+  #         hostname: "dev-api.example.com"
+  #         environment: "development"
   #
   # - name: "frontend"
   #   repo: "https://github.com/your-org/frontend.git"
   #   hostname: "www.example.com"
   #   port: "80"
+  #   auto_deploy:
+  #     enabled: false  # Disable auto-deploy for this app
+
+# Auto-deployment global settings
+auto_deploy:
+  enabled: true                    # Global auto-deploy toggle
+  webhook_port: 9000              # Port for webhook endpoint
+  webhook_secret: "change-me-secure-secret"  # Webhook secret for security
+  webhook_path: "/webhook"         # Webhook endpoint path
+  deploy_delay: 30                # Seconds to wait before deploying (allows multiple commits)
+  max_concurrent_deploys: 2       # Maximum simultaneous deployments
+  notification_email: "admin@example.com"  # Email for deployment notifications (optional)
 
 # Caddy configuration for production
 caddy_email: "admin@example.com"  # Example value, should be set in .env

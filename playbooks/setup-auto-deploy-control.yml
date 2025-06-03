@@ -1,0 +1,114 @@
+---
+# Auto-Deployment Control Node Setup Playbook
+# Sets up webhook service on control node (Mac Mini, separate droplet, etc.)
+# Usage: ansible-playbook playbooks/setup-auto-deploy-control.yml
+
+- name: Setup Auto-Deployment on Control Node
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/prod.yml
+
+  pre_tasks:
+    - name: Display control node setup information
+      debug:
+        msg: |
+          🎛️ Auto-Deployment Control Node Setup
+
+          Control Node: {{ ansible_hostname | default('localhost') }}
+          Operating System: {{ ansible_system }} {{ ansible_distribution | default('') }} {{ ansible_distribution_version | default('') }}
+          User: {{ ansible_user | default(ansible_env.USER) }}
+          Home Directory: {{ ansible_env.HOME }}
+
+          Global Settings:
+          - Enabled: {{ auto_deploy.enabled | default(false) }}
+          - Webhook Port: {{ auto_deploy.webhook_port | default(9000) }}
+          - Deploy Delay: {{ auto_deploy.deploy_delay | default(30) }} seconds
+          - Max Concurrent: {{ auto_deploy.max_concurrent_deploys | default(2) }}
+
+          Target Server Configuration:
+          {% for app in apps %}
+          {% if app.auto_deploy.enabled | default(false) %}
+          - {{ app.name }}:
+          {% for branch in app.auto_deploy.branches %}
+            - {{ branch.name }} → {{ branch.hostname }} ({{ branch.environment }})
+          {% endfor %}
+          {% endif %}
+          {% endfor %}
+
+    - name: Fail if auto-deployment is disabled
+      fail:
+        msg: |
+          ❌ Auto-deployment is disabled in configuration
+
+          To enable auto-deployment:
+          1. Edit group_vars/prod.yml
+          2. Set auto_deploy.enabled: true
+          3. Configure auto_deploy.branches for each app
+          4. Run this playbook again
+      when: not auto_deploy.enabled | default(false)
+
+    - name: Verify target server connectivity
+      command: ansible digitalocean -m ping
+      register: target_connectivity
+      failed_when: false
+      changed_when: false
+
+    - name: Display target server connectivity
+      debug:
+        msg: |
+          {% if target_connectivity.rc == 0 %}
+          ✅ Target server connectivity verified
+          {% else %}
+          ⚠️  Target server not reachable (this is OK for initial setup)
+          {% endif %}
+
+  roles:
+    - role: auto_deploy_control
+
+  post_tasks:
+    - name: Display setup completion and next steps
+      debug:
+        msg: |
+          🎉 Auto-Deployment Control Node Setup Complete!
+
+          📁 Service Directory: {{ auto_deploy_service_dir | default(ansible_env.HOME + '/auto-deploy') }}
+          📝 Logs Directory: {{ auto_deploy_log_dir | default(ansible_env.HOME + '/auto-deploy/logs') }}
+          📡 Webhook Port: {{ auto_deploy.webhook_port | default(9000) }}
+          🔐 Webhook Secret: {{ auto_deploy.webhook_secret }}
+
+          🔧 Service Management:
+
+          # Start webhook service
+          {{ auto_deploy_service_dir | default(ansible_env.HOME + '/auto-deploy') }}/start-webhook.sh
+
+          # Check service status
+          curl http://localhost:{{ auto_deploy.webhook_port | default(9000) }}/health
+
+          # View service logs
+          tail -f {{ auto_deploy_log_dir | default(ansible_env.HOME + '/auto-deploy/logs') }}/webhook.log
+
+          # Stop service
+          {{ auto_deploy_service_dir | default(ansible_env.HOME + '/auto-deploy') }}/stop-webhook.sh
+
+          📋 GitHub/GitLab Webhook Configuration:
+
+          For each repository, configure webhooks with:
+          - Payload URL: http://{{ ansible_default_ipv4.address | default('your-control-node-ip') }}:{{ auto_deploy.webhook_port | default(9000) }}{{ auto_deploy.webhook_path | default('/webhook') }}
+          - Content type: application/json
+          - Secret: {{ auto_deploy.webhook_secret }}
+          - Events: Push events only
+
+          🔗 Quick webhook setup script:
+          ./scripts/auto-deploy-control.sh webhook
+
+          🚀 Next Steps:
+          1. Start the webhook service (see commands above)
+          2. Configure webhooks in your repositories
+          3. Push to configured branches to test auto-deployment
+          4. Monitor logs to verify deployments work correctly
+
+          💡 The webhook service runs on this control node and deploys to remote target servers via SSH.
+          Target servers only run your applications - no Ansible required on them!

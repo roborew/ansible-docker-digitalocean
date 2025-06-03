@@ -10,6 +10,8 @@
 - 🌿 **Branch deployments** - Deploy any branch as separate staging environment
 - 🔐 **Private repository support** - Automatic SSH key management for private repos
 - 🌐 **Automatic HTTPS** - Caddy proxy with Let's Encrypt certificates
+- 🚧 **Maintenance mode** - Professional "Under Construction" pages for individual apps or entire system
+- 🤖 **Auto-deployment** - Automatic deployments when pushing to configured branches (main, staging, test)
 - 🔒 **Security by default** - UFW firewall, encrypted configurations, secure file permissions
 - 🔑 **1Password integration** - Support for 1Password SSH keys
 
@@ -74,6 +76,8 @@ ansible-playbook playbooks/deploy.yml -e mode=rollback
 - **[Environment Management](documents/Environment-Management.md)** - Secure .env file handling
 - **[Branch Deployments](documents/Branch-Deployments.md)** - Feature branch testing
 - **[Rollback System](documents/Rollback-System.md)** - Instant rollbacks
+- **[Maintenance Mode](documents/Maintenance-Mode.md)** - Professional "Under Construction" pages
+- **[Auto-Deployment](documents/Auto-Deployment.md)** - Automatic deployments on push to configured branches
 
 ### 🛠️ Troubleshooting & Reference
 
@@ -137,6 +141,18 @@ ansible-playbook playbooks/deploy.yml -e mode=rollback
 
 # Rollback with database restore
 ansible-playbook playbooks/deploy.yml -e mode=rollback -e restore_database=true
+
+# Maintenance mode
+./scripts/maintenance-mode.sh enable                    # Enable for all apps
+./scripts/maintenance-mode.sh enable -a myapp          # Enable for specific app only
+./scripts/maintenance-mode.sh disable                  # Disable maintenance
+./scripts/maintenance-mode.sh status                   # Check status
+
+# Auto-deployment
+./scripts/auto-deploy.sh setup                         # Setup auto-deployment service
+./scripts/auto-deploy.sh status                        # Check webhook service status
+./scripts/auto-deploy.sh webhook                       # Show webhook configuration
+./scripts/auto-deploy.sh logs                          # View deployment logs
 
 # Database management
 ansible-playbook playbooks/database-management.yml -e op=list -e app=myapp

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.auto-deploy.webhook</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{ webhook_python_env }}/bin/python</string>
+        <string>{{ auto_deploy_service_dir }}/webhook_control.py</string>
+        <string>--port</string>
+        <string>{{ auto_deploy_webhook_port }}</string>
+    </array>
+    
+    <key>WorkingDirectory</key>
+    <string>{{ ansible_project_dir }}</string>
+    
+    <key>StandardOutPath</key>
+    <string>{{ auto_deploy_log_dir }}/webhook.out</string>
+    
+    <key>StandardErrorPath</key>
+    <string>{{ auto_deploy_log_dir }}/webhook.err</string>
+    
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+        <key>PYTHONPATH</key>
+        <string>{{ webhook_python_env }}/lib/python3.*/site-packages</string>
+    </dict>
+    
+    <key>RunAtLoad</key>
+    <false/>
+    
+    <key>KeepAlive</key>
+    <true/>
+    
+    <key>ProcessType</key>
+    <string>Background</string>
+    
+    <key>UserName</key>
+    <string>{{ control_node_user }}</string>
+</dict>
+</plist> 
