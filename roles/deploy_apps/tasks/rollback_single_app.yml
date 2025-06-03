@@ -93,10 +93,38 @@
   shell: |
     echo "🚀 Starting {{ app_name }} from rollback release {{ target_release_result.stdout }}..."
     cd "{{ app_base_dir }}/current"
+
+    # Check if database backup exists for this release
+    backup_file="{{ app_base_dir }}/backups/db_backup_{{ target_release_result.stdout }}.sql"
+    if [ -f "$backup_file" ]; then
+      echo "📋 Database backup found for this release: $backup_file"
+      
+      # Check if database restore was requested
+      if [ "${restore_database:-false}" = "true" ]; then
+        echo "🔄 Restoring database to release {{ target_release_result.stdout }} state..."
+        {{ compose_command }} up -d postgres
+        sleep 5  # Wait for database to be ready
+        
+        if {{ compose_command }} exec -T postgres psql -U postgres -d {{ app_name }} < "$backup_file"; then
+          echo "✅ Database restored successfully"
+        else
+          echo "❌ Database restore failed"
+          exit 1
+        fi
+      else
+        echo "ℹ️  Database not restored (add -e restore_database=true to restore)"
+        echo "⚠️  Current database schema may be incompatible with old application"
+      fi
+    else
+      echo "⚠️  No database backup found for release {{ target_release_result.stdout }}"
+      echo "⚠️  Rolling back application code only - database schema may be incompatible"
+    fi
+
     {{ compose_command }} up -d 2>&1 | tee "{{ app_base_dir }}/shared/logs/rollback_{{ ansible_date_time.epoch }}.log"
     deploy_exit_code=$?
     if [ $deploy_exit_code -eq 0 ]; then
       echo "✅ Rollback completed successfully"
+      echo "🔍 Monitor application logs for schema compatibility issues"
     else
       echo "❌ Rollback failed with exit code $deploy_exit_code"
     fi

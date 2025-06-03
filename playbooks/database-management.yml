@@ -1,0 +1,117 @@
+---
+# Database Management Playbook
+# Handles manual database backup, restore, and management operations
+
+- name: Database Management Operations
+  hosts: digitalocean
+  become: true
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/prod.yml
+  vars:
+    target_app: "{{ app | default('rekalled') }}"
+    operation: "{{ op | default('backup') }}" # backup, restore, list
+    backup_name: "{{ backup | default('') }}"
+    restore_file: "{{ file | default('') }}"
+
+  pre_tasks:
+    - name: Display database operation info
+      debug:
+        msg: |
+          🗄️ Database Management Operation:
+
+          App: {{ target_app }}
+          Operation: {{ operation }}
+          {% if operation == 'restore' %}
+          Restore file: {{ restore_file }}
+          {% elif operation == 'backup' %}
+          Backup name: {{ backup_name | default('auto_' + ansible_date_time.epoch) }}
+          {% endif %}
+
+    - name: Set app variables
+      set_fact:
+        app_base_dir: "{{ apps_base_dir }}/{{ target_app }}"
+        timestamp: "{{ ansible_date_time.epoch }}"
+
+  tasks:
+    - name: Create manual database backup
+      shell: |
+        echo "💾 Creating manual database backup for {{ target_app }}..."
+        cd "{{ app_base_dir }}/current"
+        mkdir -p "{{ app_base_dir }}/backups"
+
+        backup_name="{{ backup_name | default('manual_' + timestamp) }}"
+        backup_file="{{ app_base_dir }}/backups/db_backup_${backup_name}.sql"
+
+        if {{ compose_command }} exec -T postgres pg_dump -U postgres {{ target_app }} > "$backup_file"; then
+          echo "✅ Database backup created: $backup_file"
+          ls -lah "$backup_file"
+        else
+          echo "❌ Database backup failed"
+          exit 1
+        fi
+      become: true
+      become_user: "{{ apps_user }}"
+      when: operation == 'backup'
+
+    - name: Restore database from backup
+      shell: |
+        echo "🔄 Restoring database for {{ target_app }}..."
+        cd "{{ app_base_dir }}/current"
+
+        backup_file="{{ app_base_dir }}/backups/{{ restore_file }}"
+        if [ ! -f "$backup_file" ]; then
+          echo "❌ Backup file not found: $backup_file"
+          exit 1
+        fi
+
+        echo "⚠️  WARNING: This will overwrite current database data!"
+        echo "📂 Restoring from: $backup_file"
+
+        # Ensure database is running
+        {{ compose_command }} up -d postgres
+        sleep 5
+
+        if {{ compose_command }} exec -T postgres psql -U postgres -d {{ target_app }} < "$backup_file"; then
+          echo "✅ Database restored successfully"
+        else
+          echo "❌ Database restore failed"
+          exit 1
+        fi
+      become: true
+      become_user: "{{ apps_user }}"
+      when: operation == 'restore' and restore_file != ''
+
+    - name: List available database backups
+      shell: |
+        echo "📋 Available database backups for {{ target_app }}:"
+        cd "{{ app_base_dir }}/backups"
+        if ls -la db_backup_*.sql 2>/dev/null; then
+          echo ""
+          echo "To restore a backup, run:"
+          echo "ansible-playbook playbooks/database-management.yml -e op=restore -e app={{ target_app }} -e file=BACKUP_FILENAME"
+        else
+          echo "No backups found"
+        fi
+      become: true
+      become_user: "{{ apps_user }}"
+      when: operation == 'list'
+
+  post_tasks:
+    - name: Display usage examples
+      debug:
+        msg: |
+          📚 Database Management Commands:
+
+          🔄 Create manual backup:
+          ansible-playbook playbooks/database-management.yml -e op=backup -e app={{ target_app }}
+
+          📋 List available backups:
+          ansible-playbook playbooks/database-management.yml -e op=list -e app={{ target_app }}
+
+          🔙 Restore from backup:
+          ansible-playbook playbooks/database-management.yml -e op=restore -e app={{ target_app }} -e file=db_backup_TIMESTAMP.sql
+
+          🔄 Rollback with database restore:
+          ansible-playbook playbooks/deploy.yml -e mode=rollback -e app={{ target_app }} -e restore_database=true
+      when: operation == 'list'

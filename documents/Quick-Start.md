@@ -86,6 +86,28 @@ Your applications should include a `docker-compose.yml` file. The system automat
 - Runs containers
 - Sets up a reverse proxy
 - Configures automatic HTTPS
+- **Creates database backups** before deployments
+- **Handles rollbacks** with optional database restore
+
+### **Database Strategy**
+
+The system follows a **clear separation of concerns**:
+
+- **Your App**: Handles database migrations during startup (Rails, Next.js with Drizzle, etc.)
+- **Ansible**: Handles automatic backups and rollback safety
+
+```bash
+# Database backups are automatic, but you can also:
+
+# List available backups
+ansible-playbook playbooks/database-management.yml -e op=list -e app=myapp
+
+# Create manual backup before risky operations
+ansible-playbook playbooks/database-management.yml -e op=backup -e app=myapp
+
+# Rollback with database restore (if needed)
+ansible-playbook playbooks/deploy.yml -e mode=rollback -e app=myapp -e restore_database=true
+```
 
 Example `docker-compose.yml`:
 
@@ -141,6 +163,7 @@ ansible-playbook playbooks/deploy.yml -e mode=rollback
 ## 📚 Next Steps
 
 - [Deployment System](Deployment-System.md) - Learn about the deployment system
+- [Database Management](Database-Management.md) - Database backups, rollbacks, and migrations
 - [Environment Management](Environment-Management.md) - Manage environment variables
 - [Private Repositories](Private-Repositories.md) - Deploy from private GitHub repositories
 - [Contributing](Contributing.md) - How to contribute to the project

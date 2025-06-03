@@ -2,16 +2,16 @@
 # Capistrano-style deployment for a single app
 # Directory structure: /opt/app-name/{current, releases, shared, repo}
 
-- name: "Set app variables for {{ current_app.name }}"
+- name: "Set app variables for {{ app.name }}"
   set_fact:
-    app_name: "{{ current_app.name }}"
-    app_repo: "{{ current_app.repo }}"
-    app_branch: "{{ current_app.branch | default('main') }}"
-    app_base_dir: "{{ apps_base_dir }}/{{ current_app.name }}"
-    app_hostname: "{{ current_app.hostname | default(current_app.name + '.' + ansible_default_ipv4.address + '.nip.io') }}"
-    app_port: "{{ current_app.port | default('3000') }}"
+    app_name: "{{ app.name }}"
+    app_repo: "{{ app.repo }}"
+    app_branch: "{{ app.branch | default('main') }}"
+    app_base_dir: "{{ apps_base_dir }}/{{ app.name }}"
+    app_hostname: "{{ app.hostname | default(app.name + '.' + ansible_default_ipv4.address + '.nip.io') }}"
+    app_port: "{{ app.port | default('3000') }}"
     deploy_timestamp: "{{ ansible_date_time.epoch }}"
-    release_dir: "{{ apps_base_dir }}/{{ current_app.name }}/releases/{{ ansible_date_time.epoch }}"
+    release_dir: "{{ apps_base_dir }}/{{ app.name }}/releases/{{ ansible_date_time.epoch }}"
 
 - name: "Display deployment info for {{ app_name }}"
   debug:
@@ -149,6 +149,21 @@
   shell: |
     if [ -L "{{ app_base_dir }}/current" ] && [ -f "{{ app_base_dir }}/current/docker-compose.yml" -o -f "{{ app_base_dir }}/current/compose.yml" ]; then
       cd "{{ app_base_dir }}/current"
+      
+      # Create database backup before stopping
+      echo "💾 Creating database backup before deployment..."
+      backup_file="{{ app_base_dir }}/backups/db_backup_{{ deploy_timestamp }}.sql"
+      mkdir -p "{{ app_base_dir }}/backups"
+      
+      if {{ compose_command }} exec -T postgres pg_dump -U postgres {{ app_name }} > "$backup_file" 2>/dev/null; then
+        echo "✅ Database backup created: $backup_file"
+        # Keep only last 5 backups
+        cd "{{ app_base_dir }}/backups"
+        ls -1t db_backup_*.sql 2>/dev/null | tail -n +6 | xargs -r rm -f
+      else
+        echo "⚠️  Database backup failed or database not running"
+      fi
+      
       {{ compose_command }} down || true
       echo "🛑 Stopped existing containers"
     else
@@ -208,6 +223,7 @@
     deploy_exit_code=$?
     if [ $deploy_exit_code -eq 0 ]; then
       echo "✅ Deployment completed successfully"
+      echo "ℹ️  Application will handle database migrations during startup"
     else
       echo "❌ Deployment failed with exit code $deploy_exit_code"
     fi

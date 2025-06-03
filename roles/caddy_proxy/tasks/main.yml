@@ -41,12 +41,26 @@
     labels:
       caddy_docker_proxy: "true"
 
-- name: Wait for Caddy to be ready
+- name: Wait for Caddy container to start
   wait_for:
     port: 80
-    host: "{{ ansible_default_ipv4.address }}"
+    host: "127.0.0.1" # Check locally instead of external IP
     delay: 5
     timeout: 60
+    state: started # Just check if port is listening
+
+- name: Verify Caddy container is running
+  docker_container_info:
+    name: "{{ caddy_container_name }}"
+  register: caddy_info
+  failed_when: not caddy_info.container.State.Running
+
+- name: Check Caddy admin API is accessible (from within container)
+  shell: docker exec {{ caddy_container_name }} curl -s -f http://localhost:2019/config/ -o /dev/null
+  register: caddy_admin_check
+  retries: 3
+  delay: 2
+  changed_when: false
 
 - name: Display Caddy proxy status
   debug:
@@ -55,6 +69,15 @@
       - Container: {{ caddy_container_name }}
       - Network: {{ caddy_network_name }}
       - Image: {{ caddy_image }}
-      - Health endpoint: http://{{ ansible_default_ipv4.address }}:2019/health
+      - Admin API: http://127.0.0.1:2019
+      - Config endpoint: http://127.0.0.1:2019/config
       - Data volume: {{ caddy_data_volume }}
       - Config volume: {{ caddy_config_volume }}
+
+      📝 Note: Caddy starts with empty configuration
+      ➡️  Applications will be auto-configured when deployed
+
+      🌐 External access will be available at:
+      - HTTP: http://{{ ansible_default_ipv4.address }}
+      - HTTPS: https://{{ ansible_default_ipv4.address }}
+      (once applications are deployed)

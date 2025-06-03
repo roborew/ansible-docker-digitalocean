@@ -70,6 +70,7 @@ ansible-playbook playbooks/deploy.yml -e mode=rollback
 ### 🎯 Core Features
 
 - **[Capistrano-Style Deployments](documents/Deployment-System.md)** - Zero-downtime deployments
+- **[Database Management](documents/Database-Management.md)** - Automatic backups and rollbacks
 - **[Environment Management](documents/Environment-Management.md)** - Secure .env file handling
 - **[Branch Deployments](documents/Branch-Deployments.md)** - Feature branch testing
 - **[Rollback System](documents/Rollback-System.md)** - Instant rollbacks
@@ -131,8 +132,15 @@ ansible-playbook playbooks/deploy.yml
 # Deploy feature branch
 ansible-playbook playbooks/deploy.yml -e mode=branch -e branch=feature-name
 
-# Rollback deployment
+# Rollback deployment (code only)
 ansible-playbook playbooks/deploy.yml -e mode=rollback
+
+# Rollback with database restore
+ansible-playbook playbooks/deploy.yml -e mode=rollback -e restore_database=true
+
+# Database management
+ansible-playbook playbooks/database-management.yml -e op=list -e app=myapp
+ansible-playbook playbooks/database-management.yml -e op=backup -e app=myapp
 
 # Check app status
 ansible digitalocean -m shell -a "cd /opt/myapp/current && docker compose ps"

@@ -221,3 +221,85 @@ See [Rollback System](Rollback-System.md) for details.
 - **[Environment Management](Environment-Management.md)** - .env file handling
 - **[Private Repositories](Private-Repositories.md)** - Private repo deployment
 - **[Monitoring](Monitoring.md)** - Deployment monitoring and logging
+
+## 🎯 Overview
+
+This system provides **zero-downtime deployments** with:
+
+- **Atomic releases** using symlink swapping
+- **Automatic rollback** capability
+- **Database backup/restore** management
+- **Reverse proxy auto-configuration** with Caddy
+- **Environment encryption** with Ansible Vault
+
+## 🗄️ Database Strategy
+
+### **Application Responsibility**
+
+Your applications (Rails, Next.js with Drizzle, etc.) handle their own:
+
+- **Database migrations** during startup or build process
+- **Schema management** and versioning
+- **Migration timing** decisions
+
+### **Ansible Responsibility**
+
+The deployment system handles:
+
+- **Automatic database backups** before each deployment
+- **Backup retention** (keeps last 5 backups automatically)
+- **Rollback options** with optional database restore
+- **Manual backup/restore** operations
+
+### **Deployment Flow with Database**
+
+```bash
+# Normal Deployment:
+1. 💾 Create automatic database backup (db_backup_TIMESTAMP.sql)
+2. 🛑 Stop current application containers
+3. 🚀 Deploy new application code to new release
+4. ▶️  Start containers (app handles migrations during startup)
+5. ✅ Application running with updated schema
+
+# Code-Only Rollback (Safe):
+ansible-playbook playbooks/deploy.yml -e mode=rollback -e app=myapp
+
+# Code + Database Rollback (Complete):
+ansible-playbook playbooks/deploy.yml -e mode=rollback -e app=myapp -e restore_database=true
+```
+
+### **Database Management Commands**
+
+```bash
+# List available backups
+ansible-playbook playbooks/database-management.yml -e op=list -e app=myapp
+
+# Create manual backup before risky operations
+ansible-playbook playbooks/database-management.yml -e op=backup -e app=myapp
+
+# Restore specific backup
+ansible-playbook playbooks/database-management.yml -e op=restore -e app=myapp -e file=db_backup_1748602032.sql
+```
+
+### **Backup Storage**
+
+- **Location**: `/opt/APP_NAME/backups/`
+- **Format**: `db_backup_TIMESTAMP.sql` (PostgreSQL dump)
+- **Retention**: Last 5 backups kept automatically
+- **Access**: Available for manual restore or rollback operations
+
+### **Rollback Safety**
+
+**Code-Only Rollback** (Default):
+
+- ✅ Safe for compatible schema changes
+- ✅ Fast rollback (no data loss)
+- ⚠️ May fail if schema is incompatible
+
+**Code + Database Rollback**:
+
+- ✅ Complete rollback to known state
+- ⚠️ Loses any data created after backup
+- ⚠️ Use only for critical issues
+
+## �� Deployment Modes

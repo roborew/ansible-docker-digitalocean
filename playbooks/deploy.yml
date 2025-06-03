@@ -61,7 +61,7 @@
       include_tasks: ../roles/deploy_apps/tasks/deploy_single_app.yml
       loop: "{{ selected_apps }}"
       loop_control:
-        loop_var: current_app
+        loop_var: app
       when: deployment_mode == 'normal'
 
     # Branch deployment
@@ -69,7 +69,7 @@
       include_tasks: ../roles/deploy_apps/tasks/deploy_branch.yml
       loop: "{{ selected_apps }}"
       loop_control:
-        loop_var: current_app
+        loop_var: app
       when: deployment_mode == 'branch'
 
     # Rollback deployment
@@ -77,7 +77,7 @@
       include_tasks: ../roles/deploy_apps/tasks/rollback_single_app.yml
       loop: "{{ selected_apps }}"
       loop_control:
-        loop_var: current_app
+        loop_var: app
       when: deployment_mode == 'rollback'
 
   post_tasks:
@@ -91,6 +91,10 @@
           {% for app in selected_apps %}
           - {{ app.name }}: https://{{ app.hostname | default(app.name + '.' + ansible_default_ipv4.address + '.nip.io') }}
           {% endfor %}
+
+          💾 Database backups created automatically before deployment
+          ℹ️  Applications handle their own database migrations during startup
+
           {% elif deployment_mode == 'branch' %}
           🌿 Branch Deployment:
           {% for app in selected_apps %}
@@ -101,18 +105,24 @@
           {% for app in selected_apps %}
           - {{ app.name }}: Rolled back to {{ target_release }}
           {% endfor %}
+
+          ⚠️  Application code rolled back, database remains current
+          💡 Use -e restore_database=true to also restore database backup
           {% endif %}
 
           📝 Useful Commands:
 
-          📊 Check Status:
+          📊 Check App Status:
           ansible digitalocean -m shell -a "cd /opt/APP_NAME/current && docker compose ps"
 
-          📄 View Logs:
+          📄 View App Logs:
           ansible digitalocean -m shell -a "cd /opt/APP_NAME/current && docker compose logs"
 
           📁 List Releases:
           ansible digitalocean -m shell -a "ls -la /opt/APP_NAME/releases/"
 
-          🔄 Manual Rollback:
-          ansible-playbook playbooks/deploy.yml -e mode=rollback -e app=APP_NAME -e release=RELEASE_ID
+          💾 Database Management:
+          ansible-playbook playbooks/database-management.yml -e op=list -e app=APP_NAME
+
+          🔄 Rollback with Database Restore:
+          ansible-playbook playbooks/deploy.yml -e mode=rollback -e app=APP_NAME -e restore_database=true
