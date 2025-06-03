@@ -1,0 +1,85 @@
+---
+- name: "📊 Check Maintenance Mode Status"
+  debug:
+    msg: "Checking maintenance mode status..."
+
+- name: Check if maintenance mode status file exists
+  stat:
+    path: "{{ maintenance_html_dir }}/status.json"
+  register: maintenance_status_file
+
+- name: Check if last maintenance status file exists
+  stat:
+    path: "{{ maintenance_html_dir }}/last_status.json"
+  register: last_maintenance_status_file
+
+- name: Load current maintenance status
+  include_vars:
+    file: "{{ maintenance_html_dir }}/status.json"
+    name: current_status
+  when: maintenance_status_file.stat.exists
+
+- name: Load last maintenance status
+  include_vars:
+    file: "{{ maintenance_html_dir }}/last_status.json"
+    name: last_status
+  when: last_maintenance_status_file.stat.exists and not maintenance_status_file.stat.exists
+
+- name: Check for running maintenance containers
+  shell: |
+    docker ps --filter "label=maintenance_mode=true" --format "table {{.Names}}\t{{.Status}}\t{{.Labels}}" | grep -v NAMES || echo "No maintenance containers running"
+  register: maintenance_containers
+  changed_when: false
+
+- name: Display maintenance mode status - ENABLED
+  debug:
+    msg: |
+      🚧 MAINTENANCE MODE: ENABLED
+
+      📍 Scope: {{ current_status.app }}
+      🕐 Started: {{ current_status.started }}
+      {% if current_status.estimated_completion %}
+      ⏰ Estimated completion: {{ current_status.estimated_completion }}
+      {% endif %}
+      📄 Reason: {{ current_status.reason }}
+      🐳 Container: {{ current_status.container_name }}
+      📂 HTML Directory: {{ maintenance_html_dir }}
+
+      🔗 Maintenance page URL: http://{{ current_status.app + '.' if current_status.app != 'all' else '' }}{{ ansible_default_ipv4.address }}.nip.io
+
+      Running maintenance containers:
+      {{ maintenance_containers.stdout }}
+
+      To disable:
+      ansible-playbook playbooks/maintenance-mode.yml -e action=disable{{ ' -e app_name=' + current_status.app if current_status.app != 'all' else '' }}
+  when: maintenance_status_file.stat.exists
+
+- name: Display maintenance mode status - DISABLED
+  debug:
+    msg: |
+      ✅ MAINTENANCE MODE: DISABLED
+
+      {% if last_maintenance_status_file.stat.exists %}
+      📊 Last maintenance session:
+      - Scope: {{ last_status.app if last_status is defined else 'Unknown' }}
+      - Disabled: {{ last_status.disabled if last_status is defined else 'Unknown' }}
+      {% if last_status.previously_started is defined %}
+      - Was active from: {{ last_status.previously_started }}
+      {% endif %}
+      {% else %}
+      📝 No previous maintenance sessions found
+      {% endif %}
+
+      Running maintenance containers:
+      {{ maintenance_containers.stdout }}
+
+      {% if maintenance_containers.stdout != "No maintenance containers running" %}
+      ⚠️  Warning: Found maintenance containers but no active status file.
+      You may need to manually clean up containers.
+      {% endif %}
+
+      To enable maintenance mode:
+      ansible-playbook playbooks/maintenance-mode.yml -e action=enable
+      # or for specific app:
+      ansible-playbook playbooks/maintenance-mode.yml -e action=enable -e app_name=myapp
+  when: not maintenance_status_file.stat.exists

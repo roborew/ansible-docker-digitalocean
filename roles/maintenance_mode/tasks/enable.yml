@@ -1,0 +1,144 @@
+---
+- name: "🚧 Enable Maintenance Mode"
+  debug:
+    msg: "Enabling maintenance mode{{ ' for ' + app_name if app_name is defined else ' for all apps' }}"
+
+- name: Set maintenance started timestamp
+  set_fact:
+    maintenance_started: "{{ ansible_date_time.iso8601 }}"
+
+- name: Ensure maintenance directory exists
+  file:
+    path: "{{ maintenance_html_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Generate maintenance HTML page
+  template:
+    src: maintenance.html.j2
+    dest: "{{ maintenance_html_dir }}/{{ maintenance_html_file }}"
+    mode: "0644"
+
+- name: Verify Caddy proxy container is running
+  docker_container_info:
+    name: "{{ caddy_container_name }}"
+  register: caddy_info
+  failed_when: not caddy_info.exists or not caddy_info.container.State.Running
+
+- name: Check if proxy network exists
+  docker_network_info:
+    name: "{{ caddy_network_name }}"
+  register: proxy_network_info
+  failed_when: not proxy_network_info.exists
+
+- name: Stop existing app container(s) to avoid conflicts
+  shell: |
+    if [ "{{ app_name | default('') }}" != "" ]; then
+      # Stop specific app
+      if [ -d "/opt/{{ app_name }}/current" ]; then
+        cd "/opt/{{ app_name }}/current"
+        docker compose stop 2>/dev/null || true
+        echo "Stopped {{ app_name }} containers"
+      else
+        echo "No {{ app_name }} deployment found"
+      fi
+    else
+      # Stop all apps in /opt/*/current directories
+      for app_dir in /opt/*/current; do
+        if [ -d "$app_dir" ] && [ -f "$app_dir/docker-compose.yml" -o -f "$app_dir/compose.yml" ]; then
+          app_name=$(basename $(dirname "$app_dir"))
+          echo "Stopping $app_name..."
+          cd "$app_dir"
+          docker compose stop 2>/dev/null || true
+        fi
+      done
+      echo "Stopped all app containers"
+    fi
+  register: stop_result
+  become: true
+
+- name: Create maintenance docker-compose.yml
+  copy:
+    content: |
+      version: '3.8'
+
+      services:
+        maintenance:
+          image: nginx:alpine
+          container_name: "maintenance-{{ app_name | default('all') }}"
+          restart: unless-stopped
+          volumes:
+            - "{{ maintenance_html_dir }}:/usr/share/nginx/html:ro"
+          networks:
+            - proxy
+          labels:
+            # Caddy labels for automatic proxy configuration
+            {% if app_name is defined %}
+            caddy: "{{ app_name }}.{{ ansible_default_ipv4.address }}.nip.io"
+            {% else %}
+            caddy: "*.{{ ansible_default_ipv4.address }}.nip.io"
+            {% endif %}
+            caddy.reverse_proxy: "{{upstreams 80}}"
+            caddy.header: "X-Maintenance-Mode true"
+            # Mark as maintenance container
+            maintenance_mode: "true"
+            maintenance_app: "{{ app_name | default('all') }}"
+            maintenance_started: "{{ maintenance_started }}"
+
+      networks:
+        proxy:
+          external: true
+          name: "{{ caddy_network_name }}"
+    dest: "{{ maintenance_html_dir }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Start maintenance mode container
+  shell: |
+    cd "{{ maintenance_html_dir }}"
+    docker compose up -d
+    echo "Maintenance container started"
+  register: maintenance_start
+
+- name: Wait for maintenance container to be ready
+  wait_for:
+    timeout: 10
+  delegate_to: localhost
+  become: false
+
+- name: Verify maintenance container is running
+  docker_container_info:
+    name: "maintenance-{{ app_name | default('all') }}"
+  register: maintenance_container_info
+  failed_when: not maintenance_container_info.exists or not maintenance_container_info.container.State.Running
+
+- name: Create maintenance mode status file
+  copy:
+    content: |
+      {
+        "enabled": true,
+        "app": "{{ app_name | default('all') }}",
+        "started": "{{ maintenance_started }}",
+        "estimated_completion": "{{ estimated_completion | default('') }}",
+        "reason": "{{ maintenance_reason }}",
+        "container_name": "maintenance-{{ app_name | default('all') }}"
+      }
+    dest: "{{ maintenance_html_dir }}/status.json"
+    mode: "0644"
+
+- name: Display maintenance mode status
+  debug:
+    msg: |
+      🚧 Maintenance mode ENABLED!
+
+      📍 Scope: {{ 'App: ' + app_name if app_name is defined else 'All apps' }}
+      🕐 Started: {{ maintenance_started }}
+      {% if estimated_completion is defined %}
+      ⏰ Estimated completion: {{ estimated_completion }}
+      {% endif %}
+      📄 Page location: {{ maintenance_html_dir }}/{{ maintenance_html_file }}
+      🐳 Container: maintenance-{{ app_name | default('all') }}
+
+      ℹ️  All traffic {{ 'for ' + app_name if app_name is defined else '' }} will now show the maintenance page.
+      🔗 Test URL: http://{{ app_name + '.' if app_name is defined else '' }}{{ ansible_default_ipv4.address }}.nip.io
+
+      To disable: ansible-playbook playbooks/maintenance-mode.yml -e action=disable{{ ' -e app_name=' + app_name if app_name is defined else '' }}

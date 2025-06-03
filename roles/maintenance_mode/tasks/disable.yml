@@ -1,0 +1,131 @@
+---
+- name: "🔄 Disable Maintenance Mode"
+  debug:
+    msg: "Disabling maintenance mode{{ ' for ' + app_name if app_name is defined else ' for all apps' }}"
+
+- name: Check if maintenance mode is currently enabled
+  stat:
+    path: "{{ maintenance_html_dir }}/status.json"
+  register: maintenance_status_file
+
+- name: Load maintenance status
+  include_vars:
+    file: "{{ maintenance_html_dir }}/status.json"
+    name: maintenance_status
+  when: maintenance_status_file.stat.exists
+
+- name: Fail if maintenance mode is not enabled
+  fail:
+    msg: |
+      ❌ Maintenance mode is not currently enabled
+      No status file found at {{ maintenance_html_dir }}/status.json
+  when: not maintenance_status_file.stat.exists
+
+- name: Verify we're disabling the correct app
+  fail:
+    msg: |
+      ❌ Mismatch: Maintenance mode is enabled for '{{ maintenance_status.app }}' 
+      but you're trying to disable for '{{ app_name }}'
+
+      To disable maintenance for {{ maintenance_status.app }}:
+      ansible-playbook playbooks/maintenance-mode.yml -e action=disable -e app_name={{ maintenance_status.app }}
+  when:
+    - app_name is defined
+    - maintenance_status is defined
+    - maintenance_status.app != app_name
+    - maintenance_status.app != "all"
+
+- name: Stop maintenance container
+  shell: |
+    cd "{{ maintenance_html_dir }}"
+    if [ -f "docker-compose.yml" ]; then
+      docker compose down
+      echo "Stopped maintenance container"
+    else
+      echo "No maintenance docker-compose.yml found"
+    fi
+  register: maintenance_stop
+  failed_when: false
+
+- name: Remove maintenance container if it exists
+  docker_container:
+    name: "maintenance-{{ app_name | default('all') }}"
+    state: absent
+    force_kill: yes
+  failed_when: false
+
+- name: Restart app container(s)
+  shell: |
+    if [ "{{ app_name | default('') }}" != "" ]; then
+      # Restart specific app
+      if [ -d "/opt/{{ app_name }}/current" ]; then
+        cd "/opt/{{ app_name }}/current"
+        echo "Restarting {{ app_name }}..."
+        docker compose up -d
+        echo "{{ app_name }} restarted"
+      else
+        echo "Warning: No {{ app_name }} deployment found at /opt/{{ app_name }}/current"
+      fi
+    else
+      # Restart all apps in /opt/*/current directories
+      restarted_apps=""
+      for app_dir in /opt/*/current; do
+        if [ -d "$app_dir" ] && [ -f "$app_dir/docker-compose.yml" -o -f "$app_dir/compose.yml" ]; then
+          app_name=$(basename $(dirname "$app_dir"))
+          echo "Restarting $app_name..."
+          cd "$app_dir"
+          docker compose up -d
+          restarted_apps="$restarted_apps $app_name"
+        fi
+      done
+      if [ -n "$restarted_apps" ]; then
+        echo "Restarted apps:$restarted_apps"
+      else
+        echo "No apps found to restart"
+      fi
+    fi
+  register: restart_result
+  become: true
+
+- name: Wait for app(s) to be ready
+  wait_for:
+    timeout: 30
+  delegate_to: localhost
+  become: false
+
+- name: Remove maintenance files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ maintenance_html_dir }}/docker-compose.yml"
+    - "{{ maintenance_html_dir }}/status.json"
+
+- name: Update maintenance status to disabled
+  copy:
+    content: |
+      {
+        "enabled": false,
+        "app": "{{ app_name | default('all') }}",
+        "disabled": "{{ ansible_date_time.iso8601 }}",
+        "previously_started": "{{ maintenance_status.started if maintenance_status is defined else '' }}"
+      }
+    dest: "{{ maintenance_html_dir }}/last_status.json"
+    mode: "0644"
+
+- name: Display maintenance mode disabled status
+  debug:
+    msg: |
+      ✅ Maintenance mode DISABLED!
+
+      📍 Scope: {{ 'App: ' + app_name if app_name is defined else 'All apps' }}
+      🕐 Disabled: {{ ansible_date_time.iso8601 }}
+      {% if maintenance_status is defined %}
+      📊 Was active from: {{ maintenance_status.started }}
+      {% endif %}
+
+      🚀 App container(s) have been restarted and should be accessible normally.
+
+      🔗 Test URL: http://{{ app_name + '.' if app_name is defined else '' }}{{ ansible_default_ipv4.address }}.nip.io
+
+      📜 Maintenance logs preserved in {{ maintenance_html_dir }}/last_status.json

@@ -1,0 +1,23 @@
+---
+- name: "🔧 Maintenance Mode Management"
+  debug:
+    msg: "Managing maintenance mode: {{ maintenance_mode_action }}"
+
+- name: Include enable tasks
+  include_tasks: enable.yml
+  when: maintenance_mode_action == "enable"
+
+- name: Include disable tasks
+  include_tasks: disable.yml
+  when: maintenance_mode_action == "disable"
+
+- name: Include status tasks
+  include_tasks: status.yml
+  when: maintenance_mode_action == "status"
+
+- name: Invalid action error
+  fail:
+    msg: |
+      ❌ Invalid maintenance_mode_action: {{ maintenance_mode_action }}
+      Valid actions are: enable, disable, status
+  when: maintenance_mode_action not in ['enable', 'disable', 'status']

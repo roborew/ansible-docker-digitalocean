@@ -12,6 +12,7 @@ Welcome to the complete documentation for the Ansible DigitalOcean Deployment sy
 - **[Capistrano-Style Deployments](Deployment-System.md)** - Zero-downtime deployments, releases, and rollbacks
 - **[Environment Management](Environment-Management.md)** - Secure .env file handling with encryption
 - **[Private Repositories](Private-Repositories.md)** - Deploy from private GitHub repositories
+- **[Maintenance Mode](Maintenance-Mode.md)** - Professional "Under Construction" pages during updates
 
 ## 🔧 Advanced Topics
 
@@ -52,6 +53,7 @@ This Ansible project automates the provisioning and configuration of DigitalOcea
 - 🔄 **Release Management** - Keeps deployment history with instant rollback capability
 - 🌿 **Branch Deployments** - Deploy any branch as separate staging environment
 - 🌐 **Reverse Proxy** - Caddy Docker Proxy with automatic TLS certificates
+- 🚧 **Maintenance Mode** - Professional "Under Construction" pages during updates and deployments
 - 🔒 **Security Setup** - Configures UFW firewall with specified rules
 - 👤 **User Management** - Creates a non-root user with Docker access
 - 🔑 **SSH Key Management** - Supports 1Password SSH keys and traditional SSH keys
@@ -59,22 +61,21 @@ This Ansible project automates the provisioning and configuration of DigitalOcea
 - 🔐 **Vault Support** - Encrypted configuration for production secrets
 - 🌍 **Cross-Platform** - Works on macOS (with Homebrew) and Ubuntu (with pip)
 
-## Quick Links
+## 🚀 Quick Links
 
-### Most Common Tasks
+**First Time Setup:**
 
-- [Deploy to production](Deployment-System.md#deployments)
-- [Deploy a feature branch](Deployment-System.md#branch-deployments)
-- [Rollback a deployment](Deployment-System.md#rollbacks)
-- [Add a new app](Quick-Start.md#adding-applications)
-- [Troubleshoot build issues](Deployment-System.md#docker-troubleshooting)
+- [📦 Quick Start Guide](Quick-Start.md) - Get up and running in 15 minutes
+- [⚙️ Configuration](Configuration.md) - Configure your apps and servers
+- [🔑 SSH Key Management](SSH-Keys.md) - Setup 1Password or traditional SSH keys
 
-### Emergency Procedures
+**Daily Operations:**
 
-- [Emergency rollback](Deployment-System.md#emergency-rollback)
-- [Docker cleanup](Deployment-System.md#docker-troubleshooting)
-- [SSH connection issues](Quick-Start.md#troubleshooting)
-- [Build failure recovery](Deployment-System.md#docker-troubleshooting)
+- [🚀 Deploy Applications](Deployment-System.md#deployment-commands) - Deploy main or feature branches
+- [🤖 Auto-Deployment](Auto-Deployment.md) - Setup automatic deployments
+- [🔄 Rollback System](Rollback-System.md) - Emergency rollbacks
+- [🚧 Maintenance Mode](Maintenance-Mode.md) - Put sites in maintenance mode
+- [💾 Database Management](Database-Management.md) - Backups and restores
 
 ## 📚 Documentation
 
@@ -85,9 +86,14 @@ This Ansible project automates the provisioning and configuration of DigitalOcea
 
 ### Core Features
 
-- **[Deployment System](Deployment-System.md)** - Complete deployment guide with examples
-- **[Database Management](Database-Management.md)** - Database backups, rollbacks, and migrations
-- **[Private Repositories](Private-Repositories.md)** - Deploy from private GitHub repositories
+- **[Capistrano-Style Deployments](Deployment-System.md)** - Zero-downtime deployments with release management
+- **[Branch Deployments](Branch-Deployments.md)** - Deploy feature branches for testing
+- **[Auto-Deployment](Auto-Deployment.md)** - Automatic deployments when pushing to configured branches
+- **[Rollback System](Rollback-System.md)** - Instant rollbacks to any previous release
+- **[Database Management](Database-Management.md)** - Automatic backups and restore
+- **[Environment Management](Environment-Management.md)** - Secure .env file handling with encryption
+- **[Maintenance Mode](Maintenance-Mode.md)** - Professional "Under Construction" pages
+- **[Private Repositories](Private-Repositories.md)** - Deploy from private GitHub repos with SSH keys
 
 ### Advanced Topics
 

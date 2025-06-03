@@ -1,0 +1,22 @@
+---
+# Maintenance mode defaults
+maintenance_mode_enabled: false
+maintenance_mode_action: "enable" # enable, disable, status
+
+# Caddy configuration
+caddy_container_name: "caddy-proxy"
+caddy_network_name: "proxy"
+
+# Maintenance page configuration
+maintenance_html_dir: "/opt/maintenance"
+maintenance_html_file: "index.html"
+
+# Page content variables (can be overridden)
+site_title: "Site Under Construction"
+status_text: "Maintenance in Progress"
+subtitle: "We are currently performing scheduled maintenance to improve your experience."
+maintenance_reason: "We are updating our systems to serve you better. This includes deploying new features, security updates, and performance improvements."
+# Optional variables that can be set when enabling maintenance mode
+# estimated_completion: "2024-01-01 15:00 UTC"
+# contact_email: "support@example.com"
+# maintenance_started: will be set automatically to current timestamp

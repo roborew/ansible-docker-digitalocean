@@ -1,0 +1,88 @@
+---
+# Maintenance Mode Management Playbook
+# Usage:
+#   Enable:  ansible-playbook playbooks/maintenance-mode.yml -e action=enable
+#   Disable: ansible-playbook playbooks/maintenance-mode.yml -e action=disable
+#   Status:  ansible-playbook playbooks/maintenance-mode.yml -e action=status
+#
+# Optional parameters:
+#   -e app_name=myapp                          # Target specific app (default: all apps)
+#   -e site_title="Custom Title"               # Custom page title
+#   -e maintenance_reason="Database migration" # Custom reason
+#   -e estimated_completion="2024-01-01 15:00" # Estimated completion time
+#   -e contact_email="support@example.com"     # Contact email for urgent issues
+
+- name: Environment Validation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - import_tasks: includes/validate_environment.yml
+
+- name: Maintenance Mode Management
+  hosts: digitalocean
+  become: true
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/prod.yml
+  vars:
+    # Default action if not specified
+    maintenance_mode_action: "{{ action | default('status') }}"
+
+  pre_tasks:
+    - name: Validate action parameter
+      fail:
+        msg: |
+          ❌ Invalid action: {{ maintenance_mode_action }}
+          Valid actions: enable, disable, status
+
+          Usage examples:
+          ansible-playbook playbooks/maintenance-mode.yml -e action=enable
+          ansible-playbook playbooks/maintenance-mode.yml -e action=disable
+          ansible-playbook playbooks/maintenance-mode.yml -e action=status
+      when: maintenance_mode_action not in ['enable', 'disable', 'status']
+
+    - name: Display maintenance mode operation
+      debug:
+        msg: |
+          🚧 Maintenance Mode Operation
+          Action: {{ maintenance_mode_action | upper }}
+          {{ 'Target: ' + app_name if app_name is defined else 'Target: All apps' }}
+          {{ 'Custom title: ' + site_title if site_title is defined }}
+          {{ 'Estimated completion: ' + estimated_completion if estimated_completion is defined }}
+
+    - name: Ensure Docker is running
+      systemd:
+        name: docker
+        state: started
+        enabled: true
+
+  roles:
+    - role: maintenance_mode
+      vars:
+        maintenance_mode_action: "{{ action | default('status') }}"
+
+  post_tasks:
+    - name: Display helpful commands
+      debug:
+        msg: |
+          📝 Maintenance Mode Commands:
+
+          Enable (all apps):
+          ansible-playbook playbooks/maintenance-mode.yml -e action=enable
+
+          Enable (specific app):
+          ansible-playbook playbooks/maintenance-mode.yml -e action=enable -e app_name=myapp
+
+          Enable with custom message:
+          ansible-playbook playbooks/maintenance-mode.yml -e action=enable -e maintenance_reason="System upgrade in progress"
+
+          Check status:
+          ansible-playbook playbooks/maintenance-mode.yml -e action=status
+
+          Disable:
+          ansible-playbook playbooks/maintenance-mode.yml -e action=disable
+
+          💡 For more customization options, see the playbook header comments.
+      when: maintenance_mode_action == "status"
