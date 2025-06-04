@@ -54,69 +54,125 @@ detect_os() {
     echo -e "${GREEN}✅ Detected OS: $OS${NC}"
 }
 
-# Function to install Ansible
-install_ansible() {
-    echo -e "\n${BLUE}📦 Installing Ansible and dependencies...${NC}"
+# Function to check for conflicting Ansible installations
+check_ansible_conflicts() {
+    echo -e "\n${BLUE}🔍 Checking for conflicting Ansible installations...${NC}"
     
-    case "$OS" in
-        "macos")
-            echo "Installing via Homebrew..."
-            brew update
-            brew install ansible
-            ;;
-        "linux")
-            case "$DISTRO" in
-                "debian")
-                    echo "Installing via apt..."
-                    sudo apt update
-                    sudo apt install -y python3 python3-pip python3-venv
-                    python3 -m pip install --user ansible
-                    # Add to PATH if not already there
-                    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-                        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-                        export PATH="$HOME/.local/bin:$PATH"
-                    fi
-                    ;;
-                "redhat")
-                    echo "Installing via yum/dnf..."
-                    sudo yum install -y python3 python3-pip || sudo dnf install -y python3 python3-pip
-                    python3 -m pip install --user ansible
-                    ;;
-            esac
-            ;;
-    esac
+    # Check for brew Ansible
+    if command -v brew &> /dev/null && brew list ansible 2>/dev/null; then
+        echo -e "${YELLOW}⚠️  Ansible installed via Homebrew detected${NC}"
+        echo -e "${YELLOW}This can conflict with virtual environment installations.${NC}"
+        echo ""
+        read -p "Uninstall Homebrew Ansible and use virtual environment instead? (y/n): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo -e "${BLUE}🗑️  Uninstalling Homebrew Ansible...${NC}"
+            brew uninstall ansible
+            echo -e "${GREEN}✅ Homebrew Ansible uninstalled${NC}"
+        else
+            echo -e "${YELLOW}⚠️  Keeping Homebrew Ansible - you may encounter conflicts${NC}"
+            echo -e "${YELLOW}If you have issues, run: brew uninstall ansible${NC}"
+        fi
+    fi
     
-    # Verify installation
-    if command -v ansible &> /dev/null; then
-        ANSIBLE_VERSION=$(ansible --version | head -n1)
-        echo -e "${GREEN}✅ Ansible installed: $ANSIBLE_VERSION${NC}"
-    else
-        echo -e "${RED}❌ Ansible installation failed${NC}"
-        exit 1
+    # Check for system Ansible
+    if command -v ansible &> /dev/null && [[ $(which ansible) != *"venv"* ]]; then
+        ANSIBLE_PATH=$(which ansible)
+        echo -e "${YELLOW}⚠️  System Ansible found at: $ANSIBLE_PATH${NC}"
+        echo -e "${YELLOW}This may conflict with virtual environment installation${NC}"
     fi
 }
 
-# Function to install Python dependencies
-install_python_deps() {
-    echo -e "\n${BLUE}🐍 Installing Python dependencies...${NC}"
+# Function to setup Python virtual environment and install dependencies
+setup_python_environment() {
+    echo -e "\n${BLUE}🐍 Setting up Python virtual environment...${NC}"
     
-    if [[ -f "requirements.txt" ]]; then
-        if command -v pip3 &> /dev/null; then
-            pip3 install --user -r requirements.txt
-        elif command -v pip &> /dev/null; then
-            pip install --user -r requirements.txt
-        else
-            echo -e "${YELLOW}⚠️  pip not found, skipping Python dependencies${NC}"
+    # Check Python version
+    if ! command -v python3 &> /dev/null; then
+        echo -e "${RED}❌ Python 3 not found${NC}"
+        case "$OS" in
+            "macos")
+                echo "Install with: brew install python@3.11"
+                ;;
+            "linux")
+                echo "Install with: sudo apt install python3 python3-venv python3-pip"
+                ;;
+        esac
+        exit 1
+    fi
+    
+    PYTHON_VERSION=$(python3 --version | cut -d' ' -f2)
+    echo -e "${GREEN}✅ Python found: $PYTHON_VERSION${NC}"
+    
+    # Install venv if needed (Linux)
+    if [[ "$OS" == "linux" ]]; then
+        if ! python3 -m venv --help &> /dev/null; then
+            echo -e "${BLUE}📦 Installing python3-venv...${NC}"
+            case "$DISTRO" in
+                "debian")
+                    sudo apt update
+                    sudo apt install -y python3-venv python3-pip
+                    ;;
+                "redhat")
+                    sudo yum install -y python3-pip || sudo dnf install -y python3-pip
+                    ;;
+            esac
         fi
+    fi
+    
+    # Remove existing venv if present
+    if [[ -d "venv" ]]; then
+        echo -e "${YELLOW}⚠️  Existing virtual environment found${NC}"
+        read -p "Remove and recreate? (y/n): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            rm -rf venv/
+            echo -e "${GREEN}✅ Removed existing virtual environment${NC}"
+        else
+            echo -e "${YELLOW}Keeping existing virtual environment${NC}"
+            return 0
+        fi
+    fi
+    
+    # Create virtual environment
+    echo -e "${BLUE}🏗️  Creating virtual environment...${NC}"
+    python3 -m venv venv
+    
+    # Activate virtual environment
+    source venv/bin/activate
+    
+    # Upgrade pip
+    echo -e "${BLUE}⬆️  Upgrading pip...${NC}"
+    pip install --upgrade pip setuptools wheel
+    
+    # Install requirements
+    if [[ -f "requirements.txt" ]]; then
+        echo -e "${BLUE}📦 Installing Python dependencies...${NC}"
+        pip install -r requirements.txt
         echo -e "${GREEN}✅ Python dependencies installed${NC}"
     else
-        echo -e "${YELLOW}⚠️  requirements.txt not found, skipping${NC}"
+        echo -e "${RED}❌ requirements.txt not found${NC}"
+        exit 1
+    fi
+    
+    # Verify Ansible installation
+    if command -v ansible &> /dev/null; then
+        ANSIBLE_VERSION=$(ansible --version | head -n1)
+        echo -e "${GREEN}✅ Ansible installed in virtual environment: $ANSIBLE_VERSION${NC}"
+    else
+        echo -e "${RED}❌ Ansible not found after installation${NC}"
+        exit 1
     fi
 }
 
 # Function to install Ansible collections
 install_ansible_collections() {
     echo -e "\n${BLUE}📦 Installing Ansible collections...${NC}"
+    
+    # Make sure we're in the venv
+    if [[ "$VIRTUAL_ENV" == "" ]]; then
+        source venv/bin/activate
+    fi
     
     ansible-galaxy collection install community.digitalocean
     ansible-galaxy collection install community.docker
@@ -277,7 +333,7 @@ show_next_steps() {
     echo -e "${BOLD}${GREEN}🎉 Bootstrap Complete!${NC}"
     echo "======================="
     echo ""
-    echo -e "${BLUE}✨ Next Steps:${NC}"
+    echo -e "${BLUE}📋 Next Steps:${NC}"
     echo ""
     echo "1. Edit your configuration:"
     echo "   nano .env                    # Add DigitalOcean API token & SSH keys"
@@ -289,10 +345,13 @@ show_next_steps() {
     echo ""
     echo -e "${GREEN}🎉 Setup complete! All validation and encryption happens automatically in playbooks.${NC}"
     echo ""
-    echo -e "${BOLD}💡 Important Notes:${NC}"
+    echo -e "${BOLD}💡 Environment Notes:${NC}"
+    echo "• Your Python virtual environment is now activated"
+    echo "• You'll see (venv) in your prompt when activated"
+    echo "• For future sessions, run: source venv/bin/activate"
+    echo "• Run 'deactivate' to exit the virtual environment"
     echo "• Keep your vault password secure (.vault_pass file)"
     echo "• Never commit .env or .vault_pass to version control"
-    echo "• Both .env and .vault_pass are already in .gitignore"
     echo ""
 
     if [[ "$SSH_KEY_FOUND" = true ]]; then
@@ -309,6 +368,11 @@ show_next_steps() {
             fi
         done
     fi
+
+    # Activate the environment automatically at the end
+    echo -e "${BLUE}🎯 Activating Python environment...${NC}"
+    source venv/bin/activate
+    echo -e "${GREEN}✅ Environment activated! You can now run Ansible commands.${NC}"
 }
 
 # Main execution
@@ -319,19 +383,25 @@ main() {
     echo -e "${BLUE}🔍 Detecting operating system...${NC}"
     detect_os
     
-    # Check if Ansible is already installed
-    if ! command -v ansible &> /dev/null; then
-        install_ansible
-    else
-        ANSIBLE_VERSION=$(ansible --version | head -n1)
-        echo -e "${GREEN}✅ Ansible already installed: $ANSIBLE_VERSION${NC}"
-    fi
+    # Check for conflicting Ansible installations
+    check_ansible_conflicts
     
-    install_python_deps
+    # Setup Python virtual environment with all dependencies
+    setup_python_environment
+    
+    # Install Ansible collections
     install_ansible_collections
+    
+    # Check SSH configuration
     check_ssh_config
+    
+    # Initialize project files
     initialize_project
+    
+    # Make scripts executable
     make_scripts_executable
+    
+    # Show next steps
     show_next_steps
 }
 
