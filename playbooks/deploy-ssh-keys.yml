@@ -114,7 +114,7 @@
             mode: "0600"
             marker: "# {mark} ANSIBLE MANAGED BLOCK - {{ item[1].name }}"
             block: |
-              Host github-{{ item[1].name }}
+              Host github.com-{{ item[1].name }}
                   HostName github.com
                   User git
                   IdentityFile ~/.ssh/{{ item[1].name }}_deploy_key
@@ -123,7 +123,7 @@
           loop: "{{ groups['digitalocean'] | default([]) | product(prod_config.apps | default([])) | list }}"
 
         - name: Test SSH connection to GitHub
-          shell: ssh -T github-{{ item[1].name }}
+          shell: ssh -T github.com-{{ item[1].name }}
           delegate_to: "{{ item[0] }}"
           loop: "{{ groups['digitalocean'] | default([]) | product(prod_config.apps | default([])) | list }}"
           register: ssh_test
