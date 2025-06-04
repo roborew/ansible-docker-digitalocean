@@ -88,10 +88,11 @@
       register: added_hosts
 
     - name: Update Ansible inventory with new droplets
-      shell: "{{ playbook_dir }}/../scripts/update-inventory.sh --only-new"
-      environment:
-        DO_API_TOKEN: "{{ do_token }}"
-        SERVER_USERNAME: "{{ lookup('env', 'SERVER_USERNAME') }}"
+      shell: |
+        set -a
+        source .env
+        set +a
+        ./scripts/update-inventory.sh --only-new
       when: added_hosts is defined and added_hosts.results | selectattr('changed') | list | length > 0
       delegate_to: localhost
       args:

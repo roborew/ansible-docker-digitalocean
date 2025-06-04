@@ -38,6 +38,13 @@ done
 echo -e "${BLUE}🔄 Updating Ansible Inventory${NC}"
 echo "=================================="
 
+# DEBUG: Show what environment variables we actually have
+echo -e "${BLUE}🔍 DEBUG: Environment variables:${NC}"
+echo "DO_API_TOKEN: ${DO_API_TOKEN:0:8}..."
+echo "SERVER_USERNAME: '$SERVER_USERNAME'"
+env | grep -E "^(DO_|SERVER_)" || echo "No DO_ or SERVER_ variables found"
+echo "=================================="
+
 # Check if DO_API_TOKEN is set
 if [ -z "$DO_API_TOKEN" ]; then
     echo -e "${RED}Error: DO_API_TOKEN not set${NC}"
