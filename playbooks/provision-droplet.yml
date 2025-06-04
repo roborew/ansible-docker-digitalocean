@@ -91,7 +91,7 @@
       shell: "{{ playbook_dir }}/../scripts/update-inventory.sh --only-new"
       environment:
         DO_API_TOKEN: "{{ do_token }}"
-        SERVER_USERNAME: "{{ server_user }}"
+        SERVER_USERNAME: "{{ lookup('env', 'SERVER_USERNAME') }}"
       when: added_hosts is defined and added_hosts.results | selectattr('changed') | list | length > 0
       delegate_to: localhost
       args:
