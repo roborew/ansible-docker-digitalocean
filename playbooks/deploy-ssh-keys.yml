@@ -91,27 +91,35 @@
 
     - name: Deploy SSH keys to servers
       block:
-        - name: Create .ssh directory on servers
+        - name: Create .ssh directory for apps_user
           file:
-            path: "~/.ssh"
+            path: "/home/{{ server_user }}/.ssh"
             state: directory
             mode: "0700"
+            owner: "{{ server_user }}"
+            group: "{{ server_user }}"
           delegate_to: "{{ item }}"
+          become: true
           loop: "{{ groups['digitalocean'] | default([]) }}"
 
-        - name: Deploy private keys to servers
+        - name: Deploy private keys to apps_user
           copy:
             src: "{{ playbook_dir }}/../files/ssh_keys/{{ item[1].name }}_deploy_key"
-            dest: "~/.ssh/{{ item[1].name }}_deploy_key"
+            dest: "/home/{{ server_user }}/.ssh/{{ item[1].name }}_deploy_key"
             mode: "0600"
+            owner: "{{ server_user }}"
+            group: "{{ server_user }}"
           delegate_to: "{{ item[0] }}"
+          become: true
           loop: "{{ groups['digitalocean'] | default([]) | product(prod_config.apps | default([])) | list }}"
 
-        - name: Create SSH config for deploy keys
+        - name: Create SSH config for deploy keys in apps_user home
           blockinfile:
-            path: "~/.ssh/config"
+            path: "/home/{{ server_user }}/.ssh/config"
             create: true
             mode: "0600"
+            owner: "{{ server_user }}"
+            group: "{{ server_user }}"
             marker: "# {mark} ANSIBLE MANAGED BLOCK - {{ item[1].name }}"
             block: |
               Host github.com-{{ item[1].name }}
@@ -120,11 +128,14 @@
                   IdentityFile ~/.ssh/{{ item[1].name }}_deploy_key
                   IdentitiesOnly yes
           delegate_to: "{{ item[0] }}"
+          become: true
           loop: "{{ groups['digitalocean'] | default([]) | product(prod_config.apps | default([])) | list }}"
 
-        - name: Test SSH connection to GitHub
+        - name: Test SSH connection to GitHub as apps_user
           shell: ssh -T github.com-{{ item[1].name }}
           delegate_to: "{{ item[0] }}"
+          become: true
+          become_user: "{{ server_user }}"
           loop: "{{ groups['digitalocean'] | default([]) | product(prod_config.apps | default([])) | list }}"
           register: ssh_test
           failed_when: false
