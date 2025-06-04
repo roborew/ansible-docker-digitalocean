@@ -213,7 +213,9 @@
 - name: Validate SSH keys exist in DigitalOcean
   shell: |
     cd {{ playbook_dir }}/..
+    set -a
     source .env
+    set +a
     if [ -f "scripts/get-ssh-key-ids.sh" ]; then
       ./scripts/get-ssh-key-ids.sh "$DO_SSH_KEYS" >/dev/null 2>&1
     else

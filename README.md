@@ -23,7 +23,7 @@
 - SSH key (1Password or traditional)
 - macOS (with Homebrew) or Ubuntu (with Python 3)
 
-### 🚀 Get Started in 4 Steps
+### 🚀 Get Started in 5 Steps
 
 ```bash
 # 1. Clone and bootstrap
@@ -31,17 +31,26 @@ git clone https://github.com/roborew/robo-ansible.git
 cd robo-ansible
 ./scripts/bootstrap.sh
 
-# 2. Configure your settings
-nano .env                    # Add DO_API_TOKEN and SSH keys
-nano group_vars/prod.yml     # Add your applications
+# 2. Activate Python environment
+source venv/bin/activate         # Always do this before using Ansible
 
-# 3. Setup environment files for your apps
+# 3. Configure your settings
+cp env.example .env
+nano .env                        # Add DO_API_TOKEN and SSH keys
+nano group_vars/prod.yml         # Add your applications
+
+# 4. Load environment variables
+source .env                      # Load your DigitalOcean API token
+
+# 5. Setup environment files for your apps
 ./scripts/setup-deploy-keys.sh                                          # Generate keys for private repos
 ansible-playbook playbooks/manage-env.yml -e action=create -e app_name=myapp
 ./scripts/manage-env.sh edit myapp                                       # Edit environment variables
 ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name=myapp
 
-# 4. Deploy everything
+# 6. Deploy everything
+source venv/bin/activate         # Activate Python environment
+source .env                      # Load environment variables
 ansible-playbook playbooks/provision-and-configure.yml
 ansible-playbook playbooks/deploy-stack.yml
 ```
@@ -49,6 +58,10 @@ ansible-playbook playbooks/deploy-stack.yml
 ### 🔄 Daily Usage
 
 ```bash
+# Activate environment first (every session)
+source venv/bin/activate
+source .env
+
 # Deploy latest changes
 ansible-playbook playbooks/deploy.yml
 
@@ -129,7 +142,13 @@ networks:
 
 ## Common Commands
 
+> **Remember**: Always run `source venv/bin/activate` and `source .env` first in each terminal session!
+
 ```bash
+# Activate environment (always run these first)
+source venv/bin/activate
+source .env
+
 # Deploy production
 ansible-playbook playbooks/deploy.yml
 

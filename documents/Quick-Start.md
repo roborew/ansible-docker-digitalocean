@@ -21,11 +21,20 @@ cd robo-ansible
 ./scripts/bootstrap.sh
 ```
 
-### 2. Configure Your Settings
+### 2. Activate Python Environment
+
+```bash
+# Activate the virtual environment (required after bootstrap)
+source venv/bin/activate
+```
+
+> 💡 **Important**: You must run `source venv/bin/activate` every time you start a new terminal session to use Ansible commands.
+
+### 3. Configure Your Settings
 
 ```bash
 # Copy the example environment file
-cp .env.example .env
+cp env.example .env
 
 # Edit the environment file with your settings
 nano .env
@@ -37,7 +46,19 @@ nano .env
 - `SSH_KEY_PATH` - Path to your SSH key (or 1Password SSH key)
 - `SSH_KEY_PASSPHRASE` (optional) - Passphrase for your SSH key
 
-### 3. Add Your Applications
+### 4. Load Environment Variables
+
+```bash
+# Load environment variables from .env file
+source .env
+
+# Verify your API token is loaded (optional)
+echo "DO_API_TOKEN is set: ${DO_API_TOKEN:0:8}..."
+```
+
+> 💡 **Important**: You must run `source .env` every time you start a new terminal session to load your DigitalOcean API token and other environment variables.
+
+### 5. Add Your Applications
 
 Edit `group_vars/prod.yml` to add your applications:
 
@@ -50,9 +71,13 @@ applications:
     port: 3000
 ```
 
-### 4. Deploy Everything
+### 6. Deploy Everything
 
 ```bash
+# First, activate environment and load variables
+source venv/bin/activate
+source .env
+
 # Provision and configure the server
 ansible-playbook playbooks/provision-and-configure.yml
 
@@ -129,27 +154,89 @@ networks:
 
 ## 🔄 Daily Usage
 
+**Remember**: Always activate your environment and load variables first in each new terminal session:
+
+```bash
+# 1. Navigate to project and activate environment
+cd robo-ansible
+source venv/bin/activate
+
+# 2. Load environment variables
+source .env
+
+# 3. Now you can run Ansible commands
+```
+
 ### Deploy Latest Changes
 
 ```bash
+# Make sure environment is activated and variables loaded
+source venv/bin/activate
+source .env
+
 ansible-playbook playbooks/deploy.yml
 ```
 
 ### Deploy Feature Branch
 
 ```bash
+# Make sure environment is activated and variables loaded
+source venv/bin/activate
+source .env
+
 ansible-playbook playbooks/deploy.yml -e mode=branch -e branch=new-feature
 ```
 
 ### Emergency Rollback
 
 ```bash
+# Make sure environment is activated and variables loaded
+source venv/bin/activate
+source .env
+
 ansible-playbook playbooks/deploy.yml -e mode=rollback
 ```
 
 ## 🛠️ Troubleshooting
 
 ### Common Issues
+
+**"ansible: command not found" or "ansible-vault: command not found"**
+
+This means the virtual environment is not activated. Always run:
+
+```bash
+source venv/bin/activate
+```
+
+You'll know it's working when you see `(venv)` at the start of your terminal prompt.
+
+**"Status code was 401 and not [200]: HTTP Error 401: Unauthorized"**
+
+This means your DigitalOcean API token is not loaded in the environment. Always run:
+
+```bash
+source .env
+```
+
+After sourcing, you can verify with: `echo "Token loaded: ${DO_API_TOKEN:0:8}..."`
+
+**"No such file or directory: venv/"**
+
+The virtual environment wasn't created. Run bootstrap again:
+
+```bash
+./scripts/bootstrap.sh
+```
+
+**"No such file or directory: .env"**
+
+The environment file doesn't exist. Create it from the example:
+
+```bash
+cp env.example .env
+nano .env  # Edit with your settings
+```
 
 - **SSH Connection Issues** - See [Private Repositories](Private-Repositories.md) for SSH key setup
 - **Docker Build Failures** - See [Deployment System](Deployment-System.md#docker-troubleshooting)

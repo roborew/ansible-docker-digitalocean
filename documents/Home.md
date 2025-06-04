@@ -59,7 +59,10 @@ This Ansible project automates the provisioning and configuration of DigitalOcea
 - 🔑 **SSH Key Management** - Supports 1Password SSH keys and traditional SSH keys
 - 🖥️ **Tmux Configuration** - Sets up tmux with the gpakosz configuration
 - 🔐 **Vault Support** - Encrypted configuration for production secrets
+- 🐍 **Python Virtual Environment** - Isolated Ansible installation with all dependencies
 - 🌍 **Cross-Platform** - Works on macOS (with Homebrew) and Ubuntu (with pip)
+
+> **💡 Important**: After running `./scripts/bootstrap.sh`, always run `source venv/bin/activate` and `source .env` before using Ansible commands.
 
 ## 🚀 Quick Links
 

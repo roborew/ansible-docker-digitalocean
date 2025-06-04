@@ -346,9 +346,9 @@ show_next_steps() {
     echo -e "${GREEN}🎉 Setup complete! All validation and encryption happens automatically in playbooks.${NC}"
     echo ""
     echo -e "${BOLD}💡 Environment Notes:${NC}"
-    echo "• Your Python virtual environment is now activated"
+    echo "• Run 'source venv/bin/activate' to activate the environment"
     echo "• You'll see (venv) in your prompt when activated"
-    echo "• For future sessions, run: source venv/bin/activate"
+    echo "• For future sessions, always run: source venv/bin/activate first"
     echo "• Run 'deactivate' to exit the virtual environment"
     echo "• Keep your vault password secure (.vault_pass file)"
     echo "• Never commit .env or .vault_pass to version control"
@@ -369,10 +369,13 @@ show_next_steps() {
         done
     fi
 
-    # Activate the environment automatically at the end
-    echo -e "${BLUE}🎯 Activating Python environment...${NC}"
-    source venv/bin/activate
-    echo -e "${GREEN}✅ Environment activated! You can now run Ansible commands.${NC}"
+    echo ""
+    echo -e "${BOLD}${BLUE}🎯 Final Step - Activate Environment:${NC}"
+    echo "Run this command now to start using Ansible:"
+    echo ""
+    echo -e "${YELLOW}   source venv/bin/activate${NC}"
+    echo ""
+    echo "Then you can run: ansible --version, ansible-vault --version, etc."
 }
 
 # Main execution
