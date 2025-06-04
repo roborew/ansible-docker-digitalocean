@@ -9,6 +9,11 @@
     # Environment validation and preparation (runs once for entire workflow)
     - import_tasks: includes/validate_environment.yml
 
+# Deploy SSH Keys (runs on localhost first to generate keys and get user input)
+- name: Deploy SSH Keys for Private Repositories
+  import_playbook: deploy-ssh-keys.yml
+  tags: ["ssh_keys", "deploy_apps"]
+
 # Main deployment play (runs on remote servers)
 - name: Deploy Caddy Proxy and Applications
   hosts: digitalocean
@@ -53,9 +58,6 @@
   roles:
     - role: caddy_proxy
       tags: ["caddy_proxy"]
-
-    - role: deploy_ssh_keys
-      tags: ["deploy_ssh_keys", "deploy_apps"]
 
     - role: deploy_apps
       tags: ["deploy_apps"]

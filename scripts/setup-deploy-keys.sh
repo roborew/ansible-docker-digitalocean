@@ -47,9 +47,14 @@ generate_deploy_key() {
 if [ -f "group_vars/prod.yml" ]; then
     echo -e "${BLUE}🔍 Checking configured apps...${NC}"
     
-    # Extract app names from YAML properly
-    # Look for '- name: "appname"' or '- name: appname' patterns
-    apps=$(grep -A 1 "^  - name:" group_vars/prod.yml | grep "name:" | sed 's/.*name: *["\'"'"']*\([^"'"'"']*\)["\'"'"']*.*/\1/' | tr '\n' ' ')
+    # Check if file is encrypted and extract app names accordingly
+    if head -n1 group_vars/prod.yml | grep -q '\$ANSIBLE_VAULT'; then
+        # File is encrypted, use ansible-vault view
+        apps=$(ansible-vault view group_vars/prod.yml | grep -A 1 "^  - name:" | grep "name:" | sed 's/.*name: *["\'"'"']*\([^"'"'"']*\)["\'"'"']*.*/\1/' | tr '\n' ' ')
+    else
+        # File is not encrypted, read directly
+        apps=$(grep -A 1 "^  - name:" group_vars/prod.yml | grep "name:" | sed 's/.*name: *["\'"'"']*\([^"'"'"']*\)["\'"'"']*.*/\1/' | tr '\n' ' ')
+    fi
     
     if [ -n "$apps" ]; then
         for app in $apps; do

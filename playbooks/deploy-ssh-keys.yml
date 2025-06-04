@@ -1,0 +1,136 @@
+---
+- name: Deploy SSH Keys for Private Repositories
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: "🔑 SSH Key Management for Applications"
+      debug:
+        msg: "Setting up SSH keys for private repositories..."
+
+    - name: Load apps configuration
+      include_vars:
+        file: "{{ playbook_dir }}/../group_vars/prod.yml"
+        name: prod_config
+
+    - name: Create SSH keys directory
+      file:
+        path: "{{ playbook_dir }}/../files/ssh_keys"
+        state: directory
+        mode: "0700"
+
+    - name: Check for existing deploy keys
+      stat:
+        path: "{{ playbook_dir }}/../files/ssh_keys/{{ item.name }}_deploy_key"
+      register: deploy_key_files
+      loop: "{{ prod_config.apps | default([]) }}"
+
+    - name: Generate missing deploy keys
+      shell: |
+        ssh-keygen -t ed25519 -f "{{ playbook_dir }}/../files/ssh_keys/{{ item.item.name }}_deploy_key" -C "deploy@{{ item.item.name }}.com" -N ""
+        chmod 600 "{{ playbook_dir }}/../files/ssh_keys/{{ item.item.name }}_deploy_key"
+        chmod 644 "{{ playbook_dir }}/../files/ssh_keys/{{ item.item.name }}_deploy_key.pub"
+      loop: "{{ deploy_key_files.results }}"
+      when: not item.stat.exists
+      register: new_keys_generated
+
+    - name: Display new deploy keys that need to be added to GitHub
+      block:
+        - name: Show instructions for new keys
+          debug:
+            msg: |
+              🔑 NEW DEPLOY KEY GENERATED for {{ item.item.item.name }}!
+
+              📋 Add this PUBLIC key to your GitHub repository:
+              Repository: {{ item.item.item.repo }}
+              Path: Settings → Deploy keys → Add deploy key
+              Title: {{ item.item.item.name }}-server-deploy
+
+              🔐 PUBLIC KEY:
+              {{ lookup('file', playbook_dir + '/../files/ssh_keys/' + item.item.item.name + '_deploy_key.pub') }}
+
+              ✅ Check 'Allow write access' if needed
+              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          loop: "{{ new_keys_generated.results }}"
+          when: new_keys_generated is defined and item.changed
+
+        - name: Wait for user to add keys to GitHub
+          pause:
+            prompt: |
+
+              🚨 ACTION REQUIRED: Add the deploy keys shown above to your GitHub repositories.
+
+              For each repository:
+              1. Go to: https://github.com/roborew/REPO_NAME/settings/keys
+              2. Click "Add deploy key"
+              3. Copy and paste the public key shown above
+              4. Give it the title shown above
+              5. ✅ Check "Allow write access" if you need push capability
+              6. Click "Add key"
+
+              Press ENTER when you have added all the keys to GitHub...
+          when: new_keys_generated is defined and new_keys_generated.results | selectattr('changed') | list | length > 0
+
+    - name: Deploy SSH keys to servers
+      block:
+        - name: Create .ssh directory on servers
+          file:
+            path: "~/.ssh"
+            state: directory
+            mode: "0700"
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['digitalocean'] | default([]) }}"
+
+        - name: Deploy private keys to servers
+          copy:
+            src: "{{ playbook_dir }}/../files/ssh_keys/{{ item[1].name }}_deploy_key"
+            dest: "~/.ssh/{{ item[1].name }}_deploy_key"
+            mode: "0600"
+          delegate_to: "{{ item[0] }}"
+          loop: "{{ groups['digitalocean'] | default([]) | product(prod_config.apps | default([])) | list }}"
+
+        - name: Create SSH config for deploy keys
+          blockinfile:
+            path: "~/.ssh/config"
+            create: true
+            mode: "0600"
+            marker: "# {mark} ANSIBLE MANAGED BLOCK - {{ item[1].name }}"
+            block: |
+              Host github-{{ item[1].name }}
+                  HostName github.com
+                  User git
+                  IdentityFile ~/.ssh/{{ item[1].name }}_deploy_key
+                  IdentitiesOnly yes
+          delegate_to: "{{ item[0] }}"
+          loop: "{{ groups['digitalocean'] | default([]) | product(prod_config.apps | default([])) | list }}"
+
+        - name: Test SSH connection to GitHub
+          shell: ssh -T github-{{ item[1].name }}
+          delegate_to: "{{ item[0] }}"
+          loop: "{{ groups['digitalocean'] | default([]) | product(prod_config.apps | default([])) | list }}"
+          register: ssh_test
+          failed_when: false
+          changed_when: false
+
+        - name: Display SSH test results
+          debug:
+            msg: |
+              SSH Test for {{ item.item[1].name }} on {{ item.item[0] }}: 
+              {{ 'SUCCESS' if 'successfully authenticated' in item.stderr else 'FAILED' }}
+              {{ item.stderr if item.stderr else item.stdout }}
+          loop: "{{ ssh_test.results }}"
+          when: ssh_test is defined
+
+    - name: "🎉 SSH Key Deployment Complete"
+      debug:
+        msg: |
+          All SSH keys have been deployed to servers!
+          ✅ Deploy keys generated for missing apps
+          ✅ Private keys deployed to servers  
+          ✅ SSH config updated
+          ✅ GitHub connections tested
+
+          🚀 Ready for deployment!
