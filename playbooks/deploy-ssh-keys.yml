@@ -63,13 +63,28 @@
 
               🚨 ACTION REQUIRED: Add the deploy keys shown above to your GitHub repositories.
 
-              For each repository:
-              1. Go to: https://github.com/roborew/REPO_NAME/settings/keys
-              2. Click "Add deploy key"
-              3. Copy and paste the public key shown above
-              4. Give it the title shown above
-              5. ✅ Check "Allow write access" if you need push capability
-              6. Click "Add key"
+              {% for key_result in new_keys_generated.results %}
+              {% if key_result.changed %}
+              🔑 {{ key_result.item.item.name }} - PUBLIC KEY:
+              {{ lookup('file', playbook_dir + '/../files/ssh_keys/' + key_result.item.item.name + '_deploy_key.pub') }}
+
+              📋 Add to: {{ key_result.item.item.repo }}
+              🔗 Go to: https://github.com/roborew/{{ key_result.item.item.repo.split('/')[-1].replace('.git', '') }}/settings/keys
+              📝 Title: {{ key_result.item.item.name }}-server-deploy
+              ✅ Check "Allow write access" if needed
+
+              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+              {% endif %}
+              {% endfor %}
+
+              Instructions:
+              1. Copy the public key(s) shown above
+              2. Go to the GitHub repository settings
+              3. Click "Add deploy key"
+              4. Paste the public key
+              5. Give it the title shown above
+              6. Check "Allow write access" if you need push capability
+              7. Click "Add key"
 
               Press ENTER when you have added all the keys to GitHub...
           when: new_keys_generated is defined and new_keys_generated.results | selectattr('changed') | list | length > 0
