@@ -36,7 +36,7 @@ For each app, add the public key to your repository:
 # Same commands work for both public and private repositories!
 
 # Initial deployment
-ansible-playbook playbooks/deploy-stack.yml
+ansible-playbook playbooks/deploy.yml -e infrastructure_setup=true
 
 # Subsequent deployments
 ansible-playbook playbooks/deploy.yml
@@ -50,7 +50,7 @@ ansible-playbook playbooks/deploy.yml -e mode=rollback
 
 ## ⚡ How Automatic Detection Works
 
-✅ **SSH keys deployed once** - During `deploy-stack.yml`  
+✅ **SSH keys deployed once** - During initial deployment  
 ✅ **Automatic per-app detection** - Each app checks for its own key  
 ✅ **Smart URL conversion** - HTTPS URLs automatically converted to SSH when keys exist  
 ✅ **Zero configuration** - No manual parameters or configuration needed  
@@ -99,7 +99,7 @@ files/ssh_keys/
 1. Configure apps in `group_vars/prod.yml`
 2. Run `./scripts/setup-deploy-keys.sh`
 3. Add public keys to GitHub repositories
-4. Deploy with `ansible-playbook playbooks/deploy-stack.yml`
+4. Deploy with `ansible-playbook playbooks/deploy.yml -e infrastructure_setup=true`
 
 ### Key Rotation
 
@@ -109,7 +109,7 @@ files/ssh_keys/
 
 # Update keys on GitHub (replace old keys)
 # Deploy updated keys
-ansible-playbook playbooks/deploy-stack.yml --tags deploy_ssh_keys
+ansible-playbook playbooks/deploy.yml --tags ssh_keys
 ```
 
 ### Emergency Key Revocation

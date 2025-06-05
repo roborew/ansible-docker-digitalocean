@@ -341,7 +341,7 @@ show_next_steps() {
     echo ""
     echo "2. Deploy your infrastructure:"
     echo "   ansible-playbook playbooks/provision-and-configure.yml"
-    echo "   ansible-playbook playbooks/deploy-stack.yml"
+    echo "   ansible-playbook playbooks/deploy.yml -e infrastructure_setup=true"
     echo ""
     echo -e "${GREEN}🎉 Setup complete! All validation and encryption happens automatically in playbooks.${NC}"
     echo ""

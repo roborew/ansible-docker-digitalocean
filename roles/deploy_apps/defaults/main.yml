@@ -20,3 +20,7 @@ no_cache: false
 
 # Network configuration
 proxy_network_name: "proxy"
+
+# Cleanup and retention configuration
+releases_to_keep: 5
+backups_to_keep: 5
