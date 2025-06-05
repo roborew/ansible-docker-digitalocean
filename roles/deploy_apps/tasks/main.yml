@@ -7,17 +7,110 @@
     group: "{{ apps_group }}"
     mode: "0755"
 
+- name: Parse app list if provided as comma-separated string
+  set_fact:
+    selected_apps_list: "{{ apps_to_deploy.split(',') | map('trim') | list }}"
+  when: apps_to_deploy is defined and apps_to_deploy != ""
+
+- name: Filter apps based on selection criteria
+  set_fact:
+    apps_to_process: |
+      {% set result = [] %}
+      {% if apps_to_deploy is defined and apps_to_deploy != "" %}
+        {# Deploy only specified apps #}
+        {% for app in apps %}
+          {% if app.name in selected_apps_list %}
+            {% set _ = result.append(app) %}
+          {% endif %}
+        {% endfor %}
+      {% elif deploy_mode == "new-only" %}
+        {# Deploy only new apps (check if current symlink exists) #}
+        {% for app in apps %}
+          {% set current_path = apps_base_dir + "/" + app.name + "/current" %}
+          {% if not (current_path | is_file or current_path | is_link) %}
+            {% set _ = result.append(app) %}
+          {% endif %}
+        {% endfor %}
+      {% else %}
+        {# Deploy all apps (default behavior when --all flag or no flags) #}
+        {% set result = apps %}
+      {% endif %}
+      {{ result }}
+
+- name: Check which apps are new (for informational purposes)
+  stat:
+    path: "{{ apps_base_dir }}/{{ item.name }}/current"
+  register: app_current_status
+  loop: "{{ apps_to_process }}"
+  when: apps_to_process | length > 0
+
+- name: Display deployment plan
+  debug:
+    msg: |
+      🚀 Deployment Plan:
+      {% if apps_to_deploy is defined and apps_to_deploy != "" %}
+      📋 Mode: Selected apps only ({{ apps_to_deploy }})
+      {% elif deploy_mode == "new-only" %}
+      📋 Mode: New apps only
+      {% else %}
+      📋 Mode: All apps
+      {% endif %}
+
+      📦 Apps to deploy ({{ apps_to_process | length }}):
+      {% for app in apps_to_process %}
+      {% set status = app_current_status.results | selectattr('item.name', 'equalto', app.name) | map(attribute='stat.exists') | first | default(false) %}
+      - {{ app.name }}: {{ app.branch | default('main') }} → {{ app.hostname }} {% if status %}(UPDATE){% else %}(NEW){% endif %}
+      {% endfor %}
+
+      {% if apps_to_process | length == 0 %}
+      ⚠️  No apps match the deployment criteria.
+      {% endif %}
+  when: apps is defined and apps | length > 0
+
 - name: Deploy applications
   include_tasks: deploy_single_app.yml
-  loop: "{{ apps }}"
+  loop: "{{ apps_to_process }}"
   loop_control:
     loop_var: app
-  when: apps is defined and apps | length > 0
+  when: apps_to_process is defined and apps_to_process | length > 0
 
 - name: Display deployment summary
   debug:
     msg: |
-      Application deployment complete!
-      Deployed {{ apps | length }} applications to {{ apps_base_dir }}
-      Applications are accessible through Caddy proxy with automatic TLS
-  when: apps is defined and apps | length > 0
+      🎉 Application deployment complete!
+
+      📊 Summary:
+      - Deployed: {{ apps_to_process | length }} applications
+      - Location: {{ apps_base_dir }}
+      - Access: Through Caddy proxy with automatic TLS
+
+      🌐 Deployed applications:
+      {% for app in apps_to_process %}
+      - {{ app.name }}: https://{{ app.hostname }}
+      {% endfor %}
+
+      💡 Next deployment options:
+      # Deploy specific apps:
+      ansible-playbook playbooks/deploy.yml -e apps_to_deploy="app1,app2"
+
+      # Deploy only new apps:
+      ansible-playbook playbooks/deploy.yml -e deploy_mode="new-only"
+
+      # Deploy all apps:
+      ansible-playbook playbooks/deploy.yml -e deploy_mode="all"
+  when: apps_to_process is defined and apps_to_process | length > 0
+
+- name: Display no-action message
+  debug:
+    msg: |
+      ℹ️  No applications deployed.
+
+      {% if deploy_mode == "new-only" %}
+      All applications already exist. Use -e deploy_mode="all" to redeploy existing apps.
+      {% elif apps_to_deploy is defined %}
+      No matching applications found for: {{ apps_to_deploy }}
+      Available apps: {{ apps | map(attribute='name') | join(', ') }}
+      {% else %}
+      No applications configured in group_vars/prod.yml
+      {% endif %}
+  when: not apps_to_process is defined or apps_to_process | length == 0

@@ -1,5 +1,5 @@
 ---
-- name: Deploy SSH Keys for Private Repositories
+- name: Generate SSH Keys for Private Repositories (Local)
   hosts: localhost
   connection: local
   gather_facts: false
@@ -63,74 +63,99 @@
 
               🚨 ACTION REQUIRED: Add the deploy keys shown above to your GitHub repositories.
 
-              For each repository:
-              1. Go to: https://github.com/roborew/REPO_NAME/settings/keys
-              2. Click "Add deploy key"
-              3. Copy and paste the public key shown above
-              4. Give it the title shown above
-              5. ✅ Check "Allow write access" if you need push capability
-              6. Click "Add key"
+              {% for key_result in new_keys_generated.results %}
+              {% if key_result.changed %}
+              🔑 {{ key_result.item.item.name }} - PUBLIC KEY:
+              {{ lookup('file', playbook_dir + '/../files/ssh_keys/' + key_result.item.item.name + '_deploy_key.pub') }}
+
+              📋 Add to: {{ key_result.item.item.repo }}
+              🔗 Go to: https://github.com/roborew/{{ key_result.item.item.repo.split('/')[-1].replace('.git', '') }}/settings/keys
+              📝 Title: {{ key_result.item.item.name }}-server-deploy
+              ✅ Check "Allow write access" if needed
+
+              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+              {% endif %}
+              {% endfor %}
+
+              Instructions:
+              1. Copy the public key(s) shown above
+              2. Go to the GitHub repository settings
+              3. Click "Add deploy key"
+              4. Paste the public key
+              5. Give it the title shown above
+              6. Check "Allow write access" if you need push capability
+              7. Click "Add key"
 
               Press ENTER when you have added all the keys to GitHub...
           when: new_keys_generated is defined and new_keys_generated.results | selectattr('changed') | list | length > 0
 
-    - name: Deploy SSH keys to servers
-      block:
-        - name: Create .ssh directory on servers
-          file:
-            path: "~/.ssh"
-            state: directory
-            mode: "0700"
-          delegate_to: "{{ item }}"
-          loop: "{{ groups['digitalocean'] | default([]) }}"
+- name: Deploy SSH Keys to Servers
+  hosts: digitalocean
+  become: true
+  gather_facts: false
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/prod.yml
 
-        - name: Deploy private keys to servers
-          copy:
-            src: "{{ playbook_dir }}/../files/ssh_keys/{{ item[1].name }}_deploy_key"
-            dest: "~/.ssh/{{ item[1].name }}_deploy_key"
-            mode: "0600"
-          delegate_to: "{{ item[0] }}"
-          loop: "{{ groups['digitalocean'] | default([]) | product(prod_config.apps | default([])) | list }}"
+  tasks:
+    - name: "🔑 Deploying SSH keys to {{ inventory_hostname }}"
+      debug:
+        msg: "Setting up SSH keys on remote server..."
 
-        - name: Create SSH config for deploy keys
-          blockinfile:
-            path: "~/.ssh/config"
-            create: true
-            mode: "0600"
-            marker: "# {mark} ANSIBLE MANAGED BLOCK - {{ item[1].name }}"
-            block: |
-              Host github-{{ item[1].name }}
-                  HostName github.com
-                  User git
-                  IdentityFile ~/.ssh/{{ item[1].name }}_deploy_key
-                  IdentitiesOnly yes
-          delegate_to: "{{ item[0] }}"
-          loop: "{{ groups['digitalocean'] | default([]) | product(prod_config.apps | default([])) | list }}"
+    - name: Create .ssh directory for apps_user
+      file:
+        path: "/home/{{ server_user }}/.ssh"
+        state: directory
+        mode: "0700"
+        owner: "{{ server_user }}"
+        group: "{{ server_user }}"
 
-        - name: Test SSH connection to GitHub
-          shell: ssh -T github-{{ item[1].name }}
-          delegate_to: "{{ item[0] }}"
-          loop: "{{ groups['digitalocean'] | default([]) | product(prod_config.apps | default([])) | list }}"
-          register: ssh_test
-          failed_when: false
-          changed_when: false
+    - name: Deploy private keys to apps_user
+      copy:
+        src: "{{ playbook_dir }}/../files/ssh_keys/{{ item.name }}_deploy_key"
+        dest: "/home/{{ server_user }}/.ssh/{{ item.name }}_deploy_key"
+        mode: "0600"
+        owner: "{{ server_user }}"
+        group: "{{ server_user }}"
+      loop: "{{ apps | default([]) }}"
 
-        - name: Display SSH test results
-          debug:
-            msg: |
-              SSH Test for {{ item.item[1].name }} on {{ item.item[0] }}: 
-              {{ 'SUCCESS' if 'successfully authenticated' in item.stderr else 'FAILED' }}
-              {{ item.stderr if item.stderr else item.stdout }}
-          loop: "{{ ssh_test.results }}"
-          when: ssh_test is defined
+    - name: Create SSH config for deploy keys in apps_user home
+      blockinfile:
+        path: "/home/{{ server_user }}/.ssh/config"
+        create: true
+        mode: "0600"
+        owner: "{{ server_user }}"
+        group: "{{ server_user }}"
+        marker: "# {mark} ANSIBLE MANAGED BLOCK - {{ item.name }}"
+        block: |
+          Host github.com-{{ item.name }}
+              HostName github.com
+              User git
+              IdentityFile ~/.ssh/{{ item.name }}_deploy_key
+              IdentitiesOnly yes
+      loop: "{{ apps | default([]) }}"
 
-    - name: "🎉 SSH Key Deployment Complete"
+    - name: Test SSH connection to GitHub as apps_user
+      shell: ssh -T github.com-{{ item.name }}
+      become_user: "{{ server_user }}"
+      loop: "{{ apps | default([]) }}"
+      register: ssh_test
+      failed_when: false
+      changed_when: false
+
+    - name: Display SSH test results
       debug:
         msg: |
-          All SSH keys have been deployed to servers!
-          ✅ Deploy keys generated for missing apps
-          ✅ Private keys deployed to servers  
+          SSH Test for {{ item.item.name }} on {{ inventory_hostname }}: 
+          {{ 'SUCCESS' if 'successfully authenticated' in item.stderr else 'FAILED' }}
+          {{ item.stderr if item.stderr else item.stdout }}
+      loop: "{{ ssh_test.results }}"
+      when: ssh_test is defined
+
+    - name: "🎉 SSH Key Deployment Complete for {{ inventory_hostname }}"
+      debug:
+        msg: |
+          SSH keys deployed successfully!
+          ✅ Private keys deployed to server  
           ✅ SSH config updated
           ✅ GitHub connections tested
-
-          🚀 Ready for deployment!

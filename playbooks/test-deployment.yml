@@ -166,7 +166,7 @@
           ==================
 
           📦 Deploy main branch:
-            ansible-playbook playbooks/deploy-stack.yml
+            ansible-playbook playbooks/deploy.yml -e infrastructure_setup=true
             ansible-playbook playbooks/deploy.yml
 
           🌿 Deploy feature branch:

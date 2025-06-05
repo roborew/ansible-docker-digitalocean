@@ -1,6 +1,22 @@
 ---
-# Manual deployment playbook with Capistrano-style releases
-- name: Deploy Applications (Capistrano-style)
+# Environment validation (optional, for first-time setups)
+- name: Environment Validation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tags: ["validate", "infrastructure"]
+
+  tasks:
+    - import_tasks: includes/validate_environment.yml
+  when: infrastructure_setup | default(false) or validate_environment | default(false)
+
+# Deploy SSH Keys for Private Repositories (if needed)
+- name: Deploy SSH Keys for Private Repositories
+  import_playbook: deploy-ssh-keys.yml
+  tags: ["ssh_keys"]
+
+# Infrastructure and Application deployment
+- name: Deploy Infrastructure and Applications
   hosts: digitalocean
   become: true
   vars_files:
@@ -9,19 +25,38 @@
   vars:
     # Default deployment mode
     deployment_mode: "{{ mode | default('normal') }}" # normal, branch, rollback
-    target_app: "{{ app | default('all') }}"
     deploy_branch: "{{ branch | default('main') }}"
     target_release: "{{ release | default('previous') }}"
     verbose_builds: "{{ verbose | default(false) }}"
 
+    # Infrastructure setup flags
+    setup_infrastructure: "{{ infrastructure_setup | default(false) }}"
+    setup_caddy: "{{ caddy_setup | default(setup_infrastructure) }}"
+
+    # Legacy support for single app deployment (deprecated)
+    legacy_app: "{{ app | default('') }}"
+
   pre_tasks:
+    - name: Handle legacy app parameter (backward compatibility)
+      set_fact:
+        apps_to_deploy: "{{ legacy_app }}"
+      when: legacy_app != "" and apps_to_deploy is not defined
+
     - name: Display deployment configuration
       debug:
         msg: |
-          🚀 Capistrano-style Deployment Configuration:
+          🚀 Enhanced Deployment Configuration:
 
           Deployment Mode: {{ deployment_mode }}
-          Target App: {{ target_app }}
+          Infrastructure Setup: {{ setup_infrastructure }}
+          Caddy Proxy Setup: {{ setup_caddy }}
+          {% if apps_to_deploy is defined and apps_to_deploy != "" %}
+          Target Apps: {{ apps_to_deploy }}
+          {% elif deploy_mode is defined %}
+          Deploy Mode: {{ deploy_mode }}
+          {% else %}
+          Target Apps: All applications
+          {% endif %}
           {% if deployment_mode == 'branch' %}
           Deploy Branch: {{ deploy_branch }}
           {% elif deployment_mode == 'rollback' %}
@@ -34,14 +69,10 @@
           - {{ app.name }}: {{ app.repo }} ({{ app.branch | default('main') }})
           {% endfor %}
 
-    - name: Set selected apps for deployment
-      set_fact:
-        selected_apps: "{{ [apps | selectattr('name', 'equalto', target_app) | first] if target_app != 'all' else apps }}"
-
-    - name: Validate target app exists
-      fail:
-        msg: "App '{{ target_app }}' not found. Available apps: {{ apps | map(attribute='name') | join(', ') }}"
-      when: target_app != 'all' and selected_apps | length == 0
+          💡 Infrastructure flags:
+          # Full setup: -e infrastructure_setup=true
+          # Caddy only: -e caddy_setup=true
+          # Apps only: (no flags, default)
 
     - name: Ensure Docker is running
       systemd:
@@ -55,74 +86,66 @@
         groups: docker
         append: true
 
-  tasks:
-    # Normal deployment
-    - name: Deploy apps (normal mode)
-      include_tasks: ../roles/deploy_apps/tasks/deploy_single_app.yml
-      loop: "{{ selected_apps }}"
-      loop_control:
-        loop_var: app
-      when: deployment_mode == 'normal'
+    - name: Install Docker Compose plugin (if infrastructure setup)
+      package:
+        name: docker-compose-plugin
+        state: present
+      when: setup_infrastructure
+      tags: ["infrastructure"]
 
-    # Branch deployment
-    - name: Deploy apps (branch mode)
-      include_tasks: ../roles/deploy_apps/tasks/deploy_branch.yml
-      loop: "{{ selected_apps }}"
-      loop_control:
-        loop_var: app
-      when: deployment_mode == 'branch'
+  roles:
+    - role: caddy_proxy
+      when: setup_caddy
+      tags: ["caddy_proxy", "infrastructure"]
 
-    # Rollback deployment
-    - name: Rollback apps
-      include_tasks: ../roles/deploy_apps/tasks/rollback_single_app.yml
-      loop: "{{ selected_apps }}"
-      loop_control:
-        loop_var: app
-      when: deployment_mode == 'rollback'
+    - role: deploy_apps
+      tags: ["deploy_apps"]
 
   post_tasks:
     - name: Display deployment summary
       debug:
         msg: |
-          🎉 Deployment Complete!
+          🎉 Enhanced Deployment Complete!
 
-          {% if deployment_mode == 'normal' %}
-          📦 Regular Deployment:
-          {% for app in selected_apps %}
-          - {{ app.name }}: https://{{ app.hostname | default(app.name + '.' + ansible_default_ipv4.address + '.nip.io') }}
-          {% endfor %}
-
-          💾 Database backups created automatically before deployment
-          ℹ️  Applications handle their own database migrations during startup
-
-          {% elif deployment_mode == 'branch' %}
-          🌿 Branch Deployment:
-          {% for app in selected_apps %}
-          - {{ app.name }} ({{ deploy_branch }}): Check deployment logs for branch URL
-          {% endfor %}
-          {% elif deployment_mode == 'rollback' %}
-          🔄 Rollback Complete:
-          {% for app in selected_apps %}
-          - {{ app.name }}: Rolled back to {{ target_release }}
-          {% endfor %}
-
-          ⚠️  Application code rolled back, database remains current
-          💡 Use -e restore_database=true to also restore database backup
+          {% if setup_infrastructure %}
+          🏗️  Infrastructure Setup:
+          ✅ Docker and Docker Compose configured
+          {% if setup_caddy %}
+          ✅ Caddy Proxy running (HTTP/HTTPS on ports 80/443)
+          ✅ Proxy network: {{ caddy_network_name | default('proxy') }}
           {% endif %}
 
-          📝 Useful Commands:
+          {% endif %}
+          {% if deployment_mode == 'normal' %}
+          📦 Application Deployment Summary:
+          Mode: {{ 'Selected Apps (' + apps_to_deploy + ')' if apps_to_deploy is defined and apps_to_deploy != '' else (deploy_mode | default('all apps')) }}
 
-          📊 Check App Status:
-          ansible digitalocean -m shell -a "cd /opt/APP_NAME/current && docker compose ps"
+          🌐 Deployed Applications:
+          {% for app in apps %}
+          {% if apps_to_deploy is not defined or apps_to_deploy == '' or app.name in (apps_to_deploy.split(',') | map('trim') | list) %}
+          - {{ app.name }}: https://{{ app.hostname }}
+          {% endif %}
+          {% endfor %}
 
-          📄 View App Logs:
-          ansible digitalocean -m shell -a "cd /opt/APP_NAME/current && docker compose logs"
+          💡 Usage Examples:
+          # Apps only: ansible-playbook playbooks/deploy.yml -e apps_to_deploy="app1,app2"
+          # New apps only: ansible-playbook playbooks/deploy.yml -e deploy_mode="new-only"
+          # Full setup: ansible-playbook playbooks/deploy.yml -e infrastructure_setup=true
+          # Caddy + apps: ansible-playbook playbooks/deploy.yml -e caddy_setup=true
 
-          📁 List Releases:
-          ansible digitalocean -m shell -a "ls -la /opt/APP_NAME/releases/"
+          {% elif deployment_mode == 'branch' %}
+          🌿 Branch Deployment Complete:
+          Branch: {{ deploy_branch }}
+          {% elif deployment_mode == 'rollback' %}
+          🔄 Rollback Complete:
+          Target: {{ target_release }}
+          {% if not restore_database | default(false) %}
+          ⚠️  Code rolled back, database unchanged
+          💡 Use -e restore_database=true to also restore database
+          {% endif %}
+          {% endif %}
 
-          💾 Database Management:
-          ansible-playbook playbooks/database-management.yml -e op=list -e app=APP_NAME
-
-          🔄 Rollback with Database Restore:
-          ansible-playbook playbooks/deploy.yml -e mode=rollback -e app=APP_NAME -e restore_database=true
+          📝 Quick Commands:
+          # App status: ansible digitalocean -m shell -a "cd /opt/APP_NAME/current && docker compose ps"
+          # App logs: ansible digitalocean -m shell -a "cd /opt/APP_NAME/current && docker compose logs"
+          # Releases: ansible digitalocean -m shell -a "ls -la /opt/APP_NAME/releases/"
