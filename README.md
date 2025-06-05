@@ -5,8 +5,10 @@
 ## Features
 
 - ⚡ **One-command setup** - Bootstrap everything with `./scripts/bootstrap.sh`
-- 🐳 **Docker-based deployments** - Automatic Docker and Docker Compose setup
+- 🚀 **Unified deployment system** - Single playbook handles infrastructure + selective app deployment
 - 🎯 **Capistrano-style releases** - Zero-downtime deployments with instant rollbacks
+- 📦 **Selective deployment** - Deploy specific apps, new-only, or all apps with granular control
+- 🐳 **Docker-based deployments** - Automatic Docker and Docker Compose setup
 - 🌿 **Branch deployments** - Deploy any branch as separate staging environment
 - 🔐 **Private repository support** - Automatic SSH key management for private repos
 - 🌐 **Automatic HTTPS** - Caddy proxy with Let's Encrypt certificates
@@ -48,9 +50,9 @@ ansible-playbook playbooks/manage-env.yml -e action=create -e app_name=myapp
 ./scripts/manage-env.sh edit myapp                                       # Edit environment variables
 ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name=myapp
 
-# 6. Deploy everything (SSH keys generated automatically)
+# 5. Deploy everything (SSH keys generated automatically)
 ansible-playbook playbooks/provision-and-configure.yml
-ansible-playbook playbooks/deploy-stack.yml                             # Handles SSH keys automatically!
+ansible-playbook playbooks/deploy.yml -e infrastructure_setup=true      # Complete setup: infrastructure + apps
 ```
 
 ### 🔄 Daily Usage
@@ -60,14 +62,17 @@ ansible-playbook playbooks/deploy-stack.yml                             # Handle
 source venv/bin/activate
 source .env
 
-# Deploy latest changes
-ansible-playbook playbooks/deploy.yml
+# Deploy only new apps (recommended)
+ansible-playbook playbooks/deploy.yml -e deploy_mode="new-only"
+
+# Deploy specific apps
+ansible-playbook playbooks/deploy.yml -e apps_to_deploy="app1,app2"
 
 # Deploy feature branch for testing
-ansible-playbook playbooks/deploy.yml -e mode=branch -e branch=new-feature
+ansible-playbook playbooks/deploy.yml -e apps_to_deploy="myapp" -e mode=branch -e branch=new-feature
 
 # Emergency rollback
-ansible-playbook playbooks/deploy.yml -e mode=rollback
+ansible-playbook playbooks/deploy.yml -e apps_to_deploy="myapp" -e mode=rollback
 ```
 
 ## 📚 Documentation
@@ -147,17 +152,32 @@ networks:
 source venv/bin/activate
 source .env
 
-# Deploy production
+# Deploy production (all apps)
 ansible-playbook playbooks/deploy.yml
 
-# Deploy feature branch
-ansible-playbook playbooks/deploy.yml -e mode=branch -e branch=feature-name
+# Deploy only NEW apps (skips existing)
+ansible-playbook playbooks/deploy.yml -e deploy_mode="new-only"
 
-# Rollback deployment (code only)
-ansible-playbook playbooks/deploy.yml -e mode=rollback
+# Deploy specific apps (comma-separated)
+ansible-playbook playbooks/deploy.yml -e apps_to_deploy="app1,app2"
+
+# Deploy all apps (redeploy existing + new)
+ansible-playbook playbooks/deploy.yml -e deploy_mode="all"
+
+# Deploy feature branch for specific app
+ansible-playbook playbooks/deploy.yml -e apps_to_deploy="myapp" -e mode=branch -e branch=feature-name
+
+# Custom retention settings (keep more releases/backups)
+ansible-playbook playbooks/deploy.yml -e releases_to_keep=10 -e backups_to_keep=15
+
+# Rollback specific apps (code only)
+ansible-playbook playbooks/deploy.yml -e mode=rollback -e apps_to_deploy="myapp"
 
 # Rollback with database restore
-ansible-playbook playbooks/deploy.yml -e mode=rollback -e restore_database=true
+ansible-playbook playbooks/deploy.yml -e mode=rollback -e apps_to_deploy="myapp" -e restore_database=true
+
+# Rollback all apps
+ansible-playbook playbooks/deploy.yml -e mode=rollback -e deploy_mode="all"
 
 # Maintenance mode
 ./scripts/maintenance-mode.sh enable                    # Enable for all apps

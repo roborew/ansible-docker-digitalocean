@@ -82,7 +82,7 @@ source .env
 ansible-playbook playbooks/provision-and-configure.yml
 
 # Deploy your applications
-ansible-playbook playbooks/deploy-stack.yml
+ansible-playbook playbooks/deploy.yml -e infrastructure_setup=true
 ```
 
 ## 🔧 Configuration

@@ -157,9 +157,9 @@
       
       if {{ compose_command }} exec -T postgres pg_dump -U postgres {{ app_name }} > "$backup_file" 2>/dev/null; then
         echo "✅ Database backup created: $backup_file"
-        # Keep only last 5 backups
+        # Keep only last {{ backups_to_keep }} backups
         cd "{{ app_base_dir }}/backups"
-        ls -1t db_backup_*.sql 2>/dev/null | tail -n +6 | xargs -r rm -f
+        ls -1t db_backup_*.sql 2>/dev/null | tail -n +{{ backups_to_keep | int + 1 }} | xargs -r rm -f
       else
         echo "⚠️  Database backup failed or database not running"
       fi
@@ -258,9 +258,9 @@
 - name: "Clean up old releases for {{ app_name }}"
   shell: |
     cd "{{ app_base_dir }}/releases"
-    # Keep only the latest 5 releases
-    ls -1t | tail -n +6 | xargs -r rm -rf
-    echo "🧹 Cleaned up old releases (keeping latest 5)"
+    # Keep only the latest {{ releases_to_keep }} releases
+    ls -1t | tail -n +{{ releases_to_keep | int + 1 }} | xargs -r rm -rf
+    echo "🧹 Cleaned up old releases (keeping latest {{ releases_to_keep }})"
   become: true
   become_user: "{{ apps_user }}"
   ignore_errors: true

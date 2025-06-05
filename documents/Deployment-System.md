@@ -27,20 +27,69 @@ Each application is deployed using the following Capistrano-style structure:
 
 ## 🚀 Deployment Commands
 
-### Initial Setup & Main Deployments
+### Selective App Deployment (New!)
 
 ```bash
-# Initial setup (creates Capistrano structure + deploys main branch)
-ansible-playbook playbooks/deploy-stack.yml
+# Deploy specific apps (comma-separated) - handles SSH keys automatically
+ansible-playbook playbooks/deploy.yml -e apps_to_deploy="rekalled,blocshed"
 
-# Deploy main branch (subsequent deployments)
+# Deploy single NEW app (perfect for adding new sites)
+ansible-playbook playbooks/deploy.yml -e apps_to_deploy="blocshed" -e deploy_mode="new-only"
+
+# Deploy only NEW apps (skips existing deployments, handles SSH keys)
+ansible-playbook playbooks/deploy.yml -e deploy_mode="new-only"
+
+# Deploy ALL apps (redeploy existing + deploy new, handles SSH keys)
+ansible-playbook playbooks/deploy.yml -e deploy_mode="all"
+
+# Deploy specific app with custom branch (handles SSH keys)
+ansible-playbook playbooks/deploy.yml -e apps_to_deploy="rekalled" -e branch="feature-branch"
+
+# Skip SSH key setup if not needed (faster for existing apps)
+ansible-playbook playbooks/deploy.yml -e apps_to_deploy="rekalled" --skip-tags ssh_keys
+```
+
+### Traditional Deployment Commands
+
+```bash
+# Initial setup (creates Capistrano structure + deploys all apps)
+ansible-playbook playbooks/deploy.yml -e infrastructure_setup=true
+
+# Deploy all apps (default behavior)
 ansible-playbook playbooks/deploy.yml
 
 # Deploy with verbose build output
 ansible-playbook playbooks/deploy.yml -e verbose=true
 
-# Deploy specific app only
+# Legacy single app deployment (deprecated - use apps_to_deploy instead)
 ansible-playbook playbooks/deploy.yml -e app=myapp
+```
+
+### Rollback Commands (Enhanced)
+
+```bash
+# Rollback specific apps
+ansible-playbook playbooks/deploy.yml -e mode=rollback -e apps_to_deploy="rekalled,blocshed"
+
+# Rollback single app
+ansible-playbook playbooks/deploy.yml -e mode=rollback -e apps_to_deploy="rekalled"
+
+# Rollback with database restore
+ansible-playbook playbooks/deploy.yml -e mode=rollback -e apps_to_deploy="rekalled" -e restore_database=true
+
+# Rollback all apps
+ansible-playbook playbooks/deploy.yml -e mode=rollback -e deploy_mode="all"
+```
+
+### Branch Deployment Examples
+
+```bash
+# Deploy feature branch for specific app
+ansible-playbook playbooks/deploy.yml -e apps_to_deploy="rekalled" -e mode=branch -e branch=new-feature
+
+# Deploy multiple apps with different branches (not supported yet - deploy separately)
+ansible-playbook playbooks/deploy.yml -e apps_to_deploy="rekalled" -e branch=feature-a
+ansible-playbook playbooks/deploy.yml -e apps_to_deploy="blocshed" -e branch=feature-b
 ```
 
 ### What Happens During Deployment
@@ -72,9 +121,47 @@ ansible-playbook playbooks/deploy.yml -e app=myapp
    - Health checks performed
 
 5. **Cleanup Phase**
-   - Old releases cleaned up (keeps last 5)
+   - Old releases cleaned up (keeps last 5 by default)
+   - Database backups cleaned up (keeps last 5 by default)
    - Deployment logs saved
    - Success/failure status recorded
+
+## ⚙️ Retention Configuration
+
+You can customize how many releases and database backups to keep:
+
+### Via Configuration File
+
+In `group_vars/prod.yml`:
+
+```yaml
+# Cleanup and retention settings (optional)
+releases_to_keep: 10 # Number of old releases to keep (default: 5)
+backups_to_keep: 10 # Number of database backups to keep (default: 5)
+```
+
+### Via Command Line
+
+```bash
+# Keep more releases and backups
+ansible-playbook playbooks/deploy.yml -e releases_to_keep=10 -e backups_to_keep=15
+
+# Keep fewer releases (minimum 1)
+ansible-playbook playbooks/deploy.yml -e releases_to_keep=3 -e backups_to_keep=3
+```
+
+### Storage Considerations
+
+- **Each release** = Full copy of your application code
+- **Each backup** = Full database dump
+- **Disk usage** = `(releases_to_keep × app_size) + (backups_to_keep × db_size)`
+
+Example storage impact:
+
+- App size: 100MB, DB size: 500MB
+- Default (5 each): ~3GB total
+- Conservative (3 each): ~1.8GB total
+- Aggressive (10 each): ~6GB total
 
 ## 🌟 Key Features
 
