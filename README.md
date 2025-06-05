@@ -48,7 +48,7 @@ ansible-playbook playbooks/manage-env.yml -e action=create -e app_name=myapp
 ./scripts/manage-env.sh edit myapp                                       # Edit environment variables
 ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name=myapp
 
-# 6. Deploy everything (SSH keys generated automatically)
+# 5. Deploy everything (SSH keys generated automatically)
 ansible-playbook playbooks/provision-and-configure.yml
 ansible-playbook playbooks/deploy-stack.yml                             # Handles SSH keys automatically!
 ```
