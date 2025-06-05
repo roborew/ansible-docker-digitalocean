@@ -29,8 +29,8 @@
 
 ```bash
 # 1. Clone and bootstrap
-git clone https://github.com/roborew/robo-ansible.git
-cd robo-ansible
+git@github.com:roborew/ansible-docker-digitalocean.git
+cd ansible-docker-digitalocean
 ./scripts/bootstrap.sh
 
 # 2. Add configuration files
