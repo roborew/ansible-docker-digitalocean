@@ -73,3 +73,33 @@ logs/
 
 # DigitalOcean
 .do_token 
+
+# === PRIVATE MODE EXCLUSIONS ===
+# Environment and secrets
+.env
+.vault_pass
+.vault_pass.txt
+
+# Server inventory and configurations
+inventory/hosts.yml
+inventory/hosts.yml.backup.*
+group_vars/prod.yml
+
+# SSH keys and encrypted files
+files/ssh_keys/*
+!files/ssh_keys/.gitkeep
+env_files/*
+!env_files/.gitkeep
+
+# Runtime files
+logs/
+backups/
+*.log
+*.backup
+*_backup_*
+
+# Temporary files
+tmp/
+.tmp/
+*.tmp
+SANITIZED.md
