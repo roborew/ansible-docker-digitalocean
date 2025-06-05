@@ -42,17 +42,16 @@ nano group_vars/prod.yml         # Add your applications
 # 4. Load environment variables
 source .env                      # Load your DigitalOcean API token
 
-# 5. Setup environment files for your apps
-./scripts/setup-deploy-keys.sh                                          # Generate keys for private repos
+# 5. Setup environment files for your apps (if needed)
 ansible-playbook playbooks/manage-env.yml -e action=create -e app_name=myapp
 ./scripts/manage-env.sh edit myapp                                       # Edit environment variables
 ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name=myapp
 
-# 6. Deploy everything
+# 6. Deploy everything (SSH keys generated automatically)
 source venv/bin/activate         # Activate Python environment
 source .env                      # Load environment variables
 ansible-playbook playbooks/provision-and-configure.yml
-ansible-playbook playbooks/deploy-stack.yml
+ansible-playbook playbooks/deploy-stack.yml                             # Handles SSH keys automatically!
 ```
 
 ### 🔄 Daily Usage
