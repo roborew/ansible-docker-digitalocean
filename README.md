@@ -210,7 +210,13 @@ ansible digitalocean -m shell -a "tail -f /opt/myapp/shared/logs/deploy_*.log"
 
 ## Contributing
 
-We welcome contributions! See our [Contributing Guide](documents/Contributing.md) for details.
+We welcome contributions! **Important**: Before sharing your changes, switch to public mode to safely exclude sensitive files:
+
+```bash
+./scripts/toggle-privacy-mode.sh public
+```
+
+See our [Contributing Guide](documents/Contributing.md) for complete details.
 
 ## License
 

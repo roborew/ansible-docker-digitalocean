@@ -309,6 +309,19 @@ make_scripts_executable() {
     echo -e "${GREEN}✅ Scripts are now executable${NC}"
 }
 
+# Function to setup privacy mode for development
+setup_privacy_mode() {
+    echo -e "\n${BLUE}🔒 Setting up privacy mode...${NC}"
+    
+    if [[ -f "scripts/toggle-privacy-mode.sh" ]]; then
+        ./scripts/toggle-privacy-mode.sh private
+        echo -e "${GREEN}✅ Repository configured for private development${NC}"
+        echo -e "${YELLOW}💡 Use './scripts/toggle-privacy-mode.sh public' before contributing${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Privacy mode script not found, skipping${NC}"
+    fi
+}
+
 # Function to display next steps
 show_next_steps() {
     echo ""
@@ -403,6 +416,9 @@ main() {
     
     # Make scripts executable
     make_scripts_executable
+    
+    # Setup privacy mode for development
+    setup_privacy_mode
     
     # Show next steps
     show_next_steps
