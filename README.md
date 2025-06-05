@@ -31,25 +31,24 @@ git clone https://github.com/roborew/robo-ansible.git
 cd robo-ansible
 ./scripts/bootstrap.sh
 
-# 2. Activate Python environment
-source venv/bin/activate         # Always do this before using Ansible
-
-# 3. Configure your settings
+# 2. Add configuration files
 cp env.example .env
 nano .env                        # Add DO_API_TOKEN and SSH keys
 nano group_vars/prod.yml         # Add your applications
+source venv/bin/activate         # Always do this before using Ansible
 
-# 4. Load environment variables
+
+# 3. Activate Python environment and load environment variables
+source venv/bin/activate  # Always do this before using Ansible
 source .env                      # Load your DigitalOcean API token
 
-# 5. Setup environment files for your apps (if needed)
+
+# 4. Setup environment files for your apps (if needed)
 ansible-playbook playbooks/manage-env.yml -e action=create -e app_name=myapp
 ./scripts/manage-env.sh edit myapp                                       # Edit environment variables
 ansible-playbook playbooks/manage-env.yml -e action=encrypt -e app_name=myapp
 
 # 6. Deploy everything (SSH keys generated automatically)
-source venv/bin/activate         # Activate Python environment
-source .env                      # Load environment variables
 ansible-playbook playbooks/provision-and-configure.yml
 ansible-playbook playbooks/deploy-stack.yml                             # Handles SSH keys automatically!
 ```
